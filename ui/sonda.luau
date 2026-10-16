@@ -655,8 +655,9 @@ local function on_line(line)
             end
             focus("location")
         elseif m.dir then
-            if m.select then s.picked = { [m.select] = true } end
+            -- Out of a search first: leaving it lets go of what was chosen.
             if s.mode == "search" then clear_search() end
+            if m.select then s.picked = { [m.select] = true } end
             go(m.dir)
         else
             toast(tr("There is no such folder") .. ": " .. tostring(m.path))

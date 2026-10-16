@@ -10,8 +10,8 @@
 
 </div>
 
-Sonda es un gestor de archivos para [pleamar-wm](https://github.com/k4ditano/pleamar-wm)
-cuya búsqueda sabe qué hay dentro de cada archivo:
+Sonda es un gestor de archivos para [pleamar-wm](https://github.com/k4ditano/pleamar-wm),
+y para cualquier otro compositor Wayland, cuya búsqueda sabe qué hay dentro de cada archivo:
 - una foto, por lo que muestra;
 - un PDF, en la página que lo dice;
 - una grabación, en el minuto exacto;
@@ -63,7 +63,7 @@ de ordenar los resultados sigue a [DigUp](https://github.com/ARahim3/DigUp) (MIT
   sudo install -Dm644 data/sonda.portal /usr/share/xdg-desktop-portal/portals/sonda.portal
   ```
 
-  y en `~/.config/xdg-desktop-portal/pleamar-portals.conf`, bajo `[preferred]`, `org.freedesktop.impl.portal.FileChooser=sonda`; después `systemctl --user restart xdg-desktop-portal`.
+  y en `~/.config/xdg-desktop-portal/pleamar-portals.conf` (en otro escritorio, el suyo: `hyprland-portals.conf`, `niri-portals.conf`…), bajo `[preferred]`, `org.freedesktop.impl.portal.FileChooser=sonda`; después `systemctl --user restart xdg-desktop-portal`.
 
   Al elegir, la ventana se titula «Sonda · Elegir», para que flote sobre el programa como un diálogo de archivos: en el `session.conf` de pleamar-wm, `window title="Sonda · Elegir" float`.
 
@@ -90,6 +90,13 @@ Para abrir las carpetas con ella: `xdg-mime default sonda.desktop inode/director
 sh scripts/build-llama.sh
 sh install.sh
 ```
+
+Funciona en cualquier compositor Wayland (Hyprland, niri, Sway, KDE): necesita
+[pleamar](https://github.com/k4ditano/pleamar), porque su ventana es una escena.
+Si además tienes `pleamar-wm` instalado (no hace falta que sea tu sesión), los
+vídeos y las grabaciones se reproducen dentro de la vista previa; solo con
+`pleamar`, «Reproducir ahí» los abre en tu reproductor. `SONDA_PLEAMAR` dice
+cuál usar si no lo encuentra.
 
 Lo que lee está en `~/.config/sonda/config.json`. Desde la terminal tienes
 `sonda search …`, `sonda status`, `sonda pause` y `sonda resume`.

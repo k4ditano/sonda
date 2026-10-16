@@ -14,8 +14,8 @@
 
 <br>
 
-Sonda is a file manager for [pleamar-wm] whose search knows what your files
-hold: a photo by what it shows, a PDF at the page that says it, a recording at
+Sonda is a file manager for [pleamar-wm], and for any other Wayland compositor,
+whose search knows what your files hold: a photo by what it shows, a PDF at the page that says it, a recording at
 the minute, a video at the moment, code at the line. Describe it in your own
 words, in any language, and it digs it up. Everything runs on your computer.
 
@@ -126,9 +126,10 @@ Windows and Linux first.
 
 # Install
 
-It needs pleamar-wm (or pleamar), ffmpeg, poppler (`pdftotext`, `pdftoppm`),
-`gio` (the trash), `wl-copy`, `bsdtar` (libarchive: packing), `udisksctl`
-(drives), and for the graphics card the Vulkan driver and `glslc` to build.
+It needs [pleamar] (its window is a pleamar scene), ffmpeg, poppler
+(`pdftotext`, `pdftoppm`), `gio` (the trash), `wl-copy`, `bsdtar` (libarchive:
+packing), `udisksctl` (drives), and for the graphics card the Vulkan driver and
+`glslc` to build.
 
 ```sh
 git clone https://github.com/k4ditano/sonda && cd sonda
@@ -150,6 +151,26 @@ and in `~/.config/pleamar/autostart`, so the index is always ready:
 ```
 sonda daemon
 ```
+
+### On another compositor
+
+Sonda is a window like any other, so it works on any Wayland compositor:
+Hyprland, niri, Sway, KDE. What changes is who holds its window:
+
+- **With pleamar-wm installed** (it does not have to be your session), the
+  window runs inside it, and a video or a recording plays right in the look.
+- **With pleamar alone**, all the same, except that «Play here» opens your
+  own player.
+
+Start the reader with your compositor (`exec-once = sonda daemon` on
+Hyprland) and bind a key to `sonda`. For the Open/Save dialog, the portal line
+below goes in your desktop's file (`hyprland-portals.conf`,
+`niri-portals.conf`…), and a window rule there can float the title «Sonda ·
+Elegir».
+
+Sonda looks for `pleamar-wm`, then `pleamar`, in your PATH, where `sonda
+setup` last found them, and in `~/.local/bin`, `~/.cargo/bin` and Nix's
+profiles; `SONDA_PLEAMAR=/path/to/pleamar` says which one to use.
 
 # What it reads
 
@@ -188,14 +209,15 @@ at a terminal; otherwise:
   ```
 
   and, in `~/.config/xdg-desktop-portal/pleamar-portals.conf` (under
-  `[preferred]`), `org.freedesktop.impl.portal.FileChooser=sonda`; then
+  `[preferred]`; on another desktop, its own file: `hyprland-portals.conf`,
+  `niri-portals.conf`…), `org.freedesktop.impl.portal.FileChooser=sonda`; then
   `systemctl --user restart xdg-desktop-portal`. Chrome and Electron programs
   use the portal by themselves; Firefox and Zen with
   `widget.use-xdg-desktop-portal.file-picker` set to 1; GTK programs with
   `GTK_USE_PORTAL=1`.
   Picking, the window is titled «Sonda · Elegir», so it can float over the
   program like a file dialog: in pleamar-wm's `session.conf`,
-  `window title="Sonda · Elegir" float`.
+  `window title="Sonda · Elegir" float` (elsewhere, a window rule on that title).
 
 To open folders with it: `xdg-mime default sonda.desktop inode/directory`.
 

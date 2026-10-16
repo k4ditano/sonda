@@ -284,7 +284,31 @@ fn detach(cmd: &str, args: &[String]) -> Result<()> {
 }
 
 fn which(cmd: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(cmd).is_file()))
+    which_path(cmd).is_some()
+}
+
+fn which_path(cmd: &str) -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?).map(|d| d.join(cmd)).find(|p| p.is_file())
+}
+
+/// What runs the window: pleamar-wm (so it can hold a player inside), or
+/// pleamar. `SONDA_PLEAMAR` says which, if set; then the PATH; then where
+/// `sonda setup` found it, and the places they are installed to. The
+/// Open/Save dialog is started by the session bus, whose PATH is only
+/// /usr/bin and /usr/local/bin: without those, it found neither.
+fn window_runner() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("SONDA_PLEAMAR").filter(|p| !p.is_empty()) {
+        return Some(PathBuf::from(p));
+    }
+    if let Some(p) = ["pleamar-wm", "pleamar"].into_iter().find_map(which_path) {
+        return Some(p);
+    }
+    if let Some(p) = std::fs::read_to_string(crate::paths::data().join("runner")).ok().map(|p| PathBuf::from(p.trim())).filter(|p| p.is_file()) {
+        return Some(p);
+    }
+    let home = crate::paths::home();
+    let dirs = [home.join(".local/bin"), home.join(".cargo/bin"), home.join(".nix-profile/bin"), PathBuf::from("/run/current-system/sw/bin")];
+    ["pleamar-wm", "pleamar"].into_iter().find_map(|b| dirs.iter().map(|d| d.join(b)).find(|p| p.is_file()))
 }
 
 pub fn open(path: &str) -> Result<()> {
@@ -705,6 +729,11 @@ pub fn setup() -> Result<()> {
         std::fs::rename(&part, &target)?;
     }
     write_ui()?;
+    // Where pleamar is, for a window started without this PATH.
+    match window_runner() {
+        Some(r) => std::fs::write(crate::paths::data().join("runner"), r.to_string_lossy().as_bytes())?,
+        None => println!("pleamar is not installed yet: Sonda's window is a pleamar scene (https://github.com/k4ditano/pleamar)"),
+    }
     let exe = std::env::current_exe()?;
     let share = std::env::var("XDG_DATA_HOME").ok().filter(|d| !d.is_empty()).map(PathBuf::from).unwrap_or_else(|| crate::paths::home().join(".local/share"));
     let apps = share.join("applications");
@@ -783,14 +812,8 @@ pub fn open_window(args: &[String]) -> Result<()> {
             _ => {}
         }
     }
-    let runner = ["pleamar-wm", "pleamar"].into_iter().find(|b| which(b)).or_else(|| {
-        let local = crate::paths::home().join("Proyectos/pleamar-wm/target/release/pleamar-wm");
-        local.exists().then_some("")
-    });
-    let runner = match runner {
-        Some("") => crate::paths::home().join("Proyectos/pleamar-wm/target/release/pleamar-wm").to_string_lossy().into_owned(),
-        Some(b) => b.to_owned(),
-        None => bail!("pleamar is not installed: Sonda's window is a pleamar scene"),
+    let Some(runner) = window_runner().map(|p| p.to_string_lossy().into_owned()) else {
+        bail!("pleamar is not installed: Sonda's window is a pleamar scene (SONDA_PLEAMAR can say where it is)");
     };
     let exe = std::env::current_exe()?.to_string_lossy().into_owned();
     // The window starts `sonda bridge` by name: wherever it was started from
