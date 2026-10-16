@@ -1,6 +1,14 @@
-# Sonda
+<div align = center>
+
+<img src="assets/header.svg" width="750" alt="Sonda">
+
+<br>
 
 **Tus archivos, y una sonda que los encuentra por lo que contienen.**
+
+[English](README.md) · [Discord](https://discord.gg/N7kbYC49b2) · [Ko-fi](https://ko-fi.com/k4ditano)
+
+</div>
 
 Sonda es un gestor de archivos para [pleamar-wm](https://github.com/k4ditano/pleamar-wm)
 cuya búsqueda sabe qué hay dentro de cada archivo:
@@ -23,7 +31,7 @@ de ordenar los resultados sigue a [DigUp](https://github.com/ARahim3/DigUp) (MIT
 
 - **Gestor de archivos**:
   - tus lugares, y las carpetas en cuadrícula con miniaturas reales (fotos, la primera página de un PDF, un fotograma de un vídeo) o en lista;
-  - atrás, adelante, arriba y migas de pan;
+  - atrás, adelante, arriba, migas de pan y una barra de ubicación para escribir la ruta (Ctrl+L, o un clic junto a las migas): `~` es tu carpeta personal, Tab completa el nombre de una carpeta, y la ruta de un archivo abre su carpeta con él elegido;
   - copiar, cortar, pegar, renombrar, carpeta nueva, papelera y restaurar;
   - arrastrar archivos a cualquier programa, y soltarlos desde cualquier programa sobre la carpeta, una carpeta de dentro, un lugar, una miga o una unidad;
   - tus unidades: un pincho se monta al pulsarlo y tiene su botón de expulsar;
@@ -71,6 +79,7 @@ Para abrir las carpetas con ella: `xdg-mime default sonda.desktop inode/director
 | `Alt+←` `Alt+→` `Alt+↑` · `Retroceso` | atrás, adelante, arriba · atrás |
 | `Ctrl+C` `Ctrl+X` `Ctrl+V` | copiar, cortar, pegar |
 | `F2` · `Ctrl+Mayús+N` · `Supr` | renombrar · carpeta nueva · a la papelera |
+| `Ctrl+L` | la barra de ubicación: escribe una ruta (`Tab` completa) |
 | `Ctrl+H` · `Espacio` · `Ctrl+A` | ocultos · vista previa · todo |
 | `Ctrl+Z` · `Alt+Intro` | deshacer · propiedades |
 | `Esc` | sale de la búsqueda |
@@ -85,4 +94,4 @@ sh install.sh
 Lo que lee está en `~/.config/sonda/config.json`. Desde la terminal tienes
 `sonda search …`, `sonda status`, `sonda pause` y `sonda resume`.
 
-Licencia MIT.
+Licencia MIT. Las contribuciones son bienvenidas, hechas con IA o sin ella: mira la [política de IA](AI_POLICY.md).

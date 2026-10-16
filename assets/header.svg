@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="300" viewBox="0 0 750 300">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1a1c"/>
+      <stop offset="0.6" stop-color="#0f2528"/>
+      <stop offset="1" stop-color="#133236"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.35" r="0.55">
+      <stop offset="0" stop-color="#9ed6bd" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#9ed6bd" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="750" height="300" rx="28" fill="url(#sea)"/>
+  <rect width="750" height="300" rx="28" fill="url(#glow)"/>
+  <path d="M0 232 C 90 212, 170 252, 260 232 S 430 212, 520 232 S 680 252, 750 230 L750 300 L0 300 Z" fill="#9ed6bd" fill-opacity="0.07"/>
+  <path d="M0 252 C 110 236, 200 268, 300 250 S 480 234, 570 252 S 700 266, 750 250 L750 300 L0 300 Z" fill="#9ed6bd" fill-opacity="0.09"/>
+  <path d="M0 272 C 120 260, 220 286, 330 270 S 520 258, 620 274 S 720 282, 750 272 L750 300 L0 300 Z" fill="#9ed6bd" fill-opacity="0.12"/>
+  <g>
+    <circle cx="356" cy="88" r="9" fill="#9ed6bd"/>
+    <path d="M369.4 73.1 A 20 20 0 0 1 369.4 102.9" fill="none" stroke="#9ed6bd" stroke-opacity="0.9" stroke-width="5" stroke-linecap="round"/>
+    <path d="M378.1 63.5 A 33 33 0 0 1 378.1 112.5" fill="none" stroke="#9ed6bd" stroke-opacity="0.6" stroke-width="5" stroke-linecap="round"/>
+    <path d="M386.8 53.8 A 46 46 0 0 1 386.8 122.2" fill="none" stroke="#9ed6bd" stroke-opacity="0.35" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="375" y="178" text-anchor="middle" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#f5f7f5" letter-spacing="-1">Sonda</text>
+  <text x="375" y="214" text-anchor="middle" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" fill="#9ed6bd" fill-opacity="0.9">a file manager that finds your files by what is in them</text>
+</svg>
