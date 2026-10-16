@@ -106,6 +106,65 @@ fn crumbs(path: &Path) -> Vec<Value> {
     out
 }
 
+/// A place typed in the location bar: `~` is home, a relative one is from
+/// the folder shown, `..` climbs. A folder is gone to; a file, its folder
+/// with it chosen. With `complete` (Tab), the name being typed is finished
+/// as far as the folders that start like it agree.
+fn where_to(typed: &str, base: &str, complete: bool) -> Value {
+    let typed = typed.trim();
+    let home = crate::paths::home();
+    let raw = if typed == "~" {
+        home.clone()
+    } else if let Some(rest) = typed.strip_prefix("~/") {
+        home.join(rest)
+    } else if typed.is_empty() {
+        PathBuf::from(base)
+    } else {
+        Path::new(base).join(typed)
+    };
+    let mut path = PathBuf::from("/");
+    for c in raw.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                path.pop();
+            }
+            std::path::Component::Normal(n) => path.push(n),
+            _ => {}
+        }
+    }
+    if complete {
+        // What is typed after the last slash is the start of a name.
+        let (dir, start) = if typed.ends_with('/') || typed.is_empty() { (path.clone(), String::new()) } else { (path.parent().map(Path::to_path_buf).unwrap_or_else(|| "/".into()), path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()) };
+        let low = start.to_lowercase();
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .map(|rd| rd.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+            .unwrap_or_default();
+        names.retain(|n| n.to_lowercase().starts_with(&low) && (start.starts_with('.') || !n.starts_with('.')));
+        names.sort();
+        let Some(first) = names.first() else {
+            return json!({ "t": "where", "complete": true, "matches": 0 });
+        };
+        // As far as all of them agree (ignoring case, as it was matched).
+        let mut common: Vec<char> = first.chars().collect();
+        for n in &names[1..] {
+            let same = common.iter().zip(n.chars()).take_while(|(a, b)| a.to_lowercase().eq(b.to_lowercase())).count();
+            common.truncate(same);
+        }
+        let mut done = dir.join(common.iter().collect::<String>()).to_string_lossy().into_owned();
+        if names.len() == 1 {
+            done.push('/');
+        }
+        return json!({ "t": "where", "complete": true, "matches": names.len(), "text": done, "names": names.iter().take(8).collect::<Vec<_>>() });
+    }
+    if path.is_dir() {
+        json!({ "t": "where", "dir": path.to_string_lossy() })
+    } else if path.exists() {
+        json!({ "t": "where", "dir": path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|| "/".into()), "select": path.to_string_lossy() })
+    } else {
+        json!({ "t": "where", "missing": true, "path": path.to_string_lossy() })
+    }
+}
+
 fn tell_daemon(paths: &[String]) {
     let mut all: Vec<String> = paths.to_vec();
     // A folder's parent changes too (something left it).
@@ -155,6 +214,7 @@ fn handle(req: &Value, out: &Arc<Out>, thumbs: &Arc<Thumbs>, jobs: &Arc<jobs::Jo
     let op = req["op"].as_str().unwrap_or("");
     match op {
         "places" => out.send(places()),
+        "where" => out.send(where_to(req["text"].as_str().unwrap_or(""), req["base"].as_str().unwrap_or("/"), req["complete"].as_bool().unwrap_or(false))),
         "list" => {
             let path = PathBuf::from(req["path"].as_str().unwrap_or("/"));
             let hidden = req["hidden"].as_bool().unwrap_or(false);

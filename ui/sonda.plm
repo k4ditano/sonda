@@ -42,6 +42,7 @@ scene Sonda {
     fact preview.on = true               // the look on the right
     // Picking for another program (its «Open» or «Save» dialog): a bar at the bottom.
     fact pick.on = false
+    fact addr.on = false                 // the location bar is being written in
     fact pick.mode: open | save | folder = open
     fact pick.ok = false                 // there is something to give it
     fact pick.filters = 0                // the program's filters («Pictures», «All files»)
@@ -135,7 +136,7 @@ scene Sonda {
     fact pr.link = false
     fact here.read = false               // the folder shown is read already (or is inside one)
 
-    text where = ""
+    text location = ""                  // the location bar's path
     text folder.name = ""
     text query = ""
     text status.line = ""
@@ -218,6 +219,10 @@ scene Sonda {
 
     event go ->                          // a place, by its index
     event crumb ->                       // a crumb, by its index
+    event addr_open ->                   // the crumbs become the path, to write in
+    event addr_close ->
+    event addr_go ->                     // Enter: go there
+    event addr_complete ->               // Tab: finish the folder's name
     event nav ->                         // 0 back · 1 forward · 2 up · 3 reload
     event tile ->                        // pressed: index
     event tile_ctrl ->                   // pressed with Ctrl: one more
@@ -641,9 +646,13 @@ scene Sonda {
     NavBtn(1, side + 64, can.forward)
     NavBtn(2, side + 98, can.up)
 
-    // The crumbs: each a place to go back to.
+    // The crumbs: each a place to go back to. A press beside them (or
+    // Ctrl+L) turns them into the whole path, to write another.
     group {
-        show: W - side - 120 - sw - 30 >= 60
+        show: W - side - 120 - sw - 30 >= 60 and not addr.on
+        zone box crumbbg { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36; corner: 8; cursor: text; label: "Location" }
+        box { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36; corner: 8; color: ink; opacity: 4% * crumbbg.hover }
+        on press crumbbg { emit addr_open }
         clip box { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36 }
         row crumbrow { at: side + 124, 32; anchor: left middle; gap: 0
             for c in crumbs {
@@ -657,6 +666,21 @@ scene Sonda {
         }
     }
 
+    // The location bar: from the crumbs to the right edge, over the search
+    // while it is written in. Enter goes, Tab finishes a folder's name, Esc
+    // or a press elsewhere leaves it.
+    group {
+        show: addr.on
+        body {
+            color: #1b2421
+            rim: 22%
+            border: 1, mix(#26302c, mint, 0.6)
+            box { from: side + 120, 12; size: W - side - 138, 40; corner: 20 }
+        }
+        input location { at: side + 138, 32 - 8.45; width: W - side - 180; size: 13; color: ink; placeholder: "A folder: ~/Documents, /mnt/disk…"; label: "Location" }
+    }
+    on submit location { emit addr_go }
+
     // The search: describe it, in your own words.
     prop sf = 0 ~quick
     follow sf = if(mode == search, 1, 0)
@@ -664,6 +688,7 @@ scene Sonda {
     let sw = clamp(min((W - side) * 0.42, W - side - 150), 150, 440)
     let sx0 = W - sw - 18
     group {
+        show: not addr.on
         body {
             color: mix(#161b19, #1b2421, sf)
             rim: 12% + 10% * sf
@@ -1288,37 +1313,43 @@ scene Sonda {
     }
 
     // ═════════════════ keys ═════════════════
+    on key Escape while addr.on { emit addr_close }
+    on key Tab while addr.on { emit addr_complete }
     on key Escape while menu.open { menu.open = false }
     on key Escape while ask.open { emit ask_cancel }
-    on key Escape while not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and mode == search { emit clear_search }
-    on key Escape while pick.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and not settings.open and mode == browse { emit pick_cancel }
-    on key Ctrl+z while not ask.open { emit undo }
+    on key Escape while not addr.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and mode == search { emit clear_search }
+    on key Escape while not addr.on and pick.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and not settings.open and mode == browse { emit pick_cancel }
+    on key Ctrl+z while not ask.open and not addr.on { emit undo }
     on key Alt+Return { emit act(15) }
     on key Ctrl+f { focus query }
-    on key Ctrl+l { focus query }
+    on key Ctrl+l { emit addr_open }
     on key Alt+Left { emit nav(0) }
     on key Alt+Right { emit nav(1) }
     on key Alt+Up { emit nav(2) }
     on key F5 { emit nav(3) }
     on key Ctrl+h { emit toggle_hidden }
-    on key F2 while not ask.open and not pick.on { emit act(6) }
+    on key F2 while not ask.open and not pick.on and not addr.on { emit act(6) }
     on key Ctrl+Shift+n { emit act(7) }
-    on key Delete while not ask.open and not pick.on { emit act(9) }
-    on key Ctrl+c while not ask.open { emit act(3) }
-    on key Ctrl+x while not ask.open { emit act(4) }
-    on key Ctrl+v while not ask.open { emit act(5) }
-    on key Ctrl+a { emit key_nav(9) }
+    on key Delete while not ask.open and not pick.on and not addr.on { emit act(9) }
+    on key Ctrl+c while not ask.open and not addr.on { emit act(3) }
+    on key Ctrl+x while not ask.open and not addr.on { emit act(4) }
+    on key Ctrl+v while not ask.open and not addr.on { emit act(5) }
+    on key Ctrl+a while not addr.on { emit key_nav(9) }
     on key Left { emit key_nav(0) }
     on key Right { emit key_nav(1) }
     on key Up { emit key_nav(2) }
     on key Down { emit key_nav(3) }
-    on key Return while not ask.open and not ow.open and not cf.open and not pr.open { emit key_nav(4) }
+    on key Return while not ask.open and not ow.open and not cf.open and not pr.open and not addr.on { emit key_nav(4) }
     on key BackSpace { emit key_nav(5) }
     on key space { emit key_nav(6) }
     on key Home { emit key_nav(7) }
     on key End { emit key_nav(8) }
 
     translations es {
+        "Location" = "Ubicación"
+        "A folder: ~/Documents, /mnt/disk…" = "Una carpeta: ~/Documentos, /mnt/disco…"
+        "No folder starts like that" = "Ninguna carpeta empieza así"
+        "There is no such folder" = "No existe esa carpeta"
         "Reading" = "Lectura"
         "Up to date" = "Al día"
         "Not running" = "Detenida"

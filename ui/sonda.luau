@@ -302,7 +302,16 @@ end
 
 -- ── going places ──
 
+-- The location bar: the crumbs turned into the whole path, to write in.
+local function addr_close()
+    if not s.addr then return end
+    s.addr = false
+    fact["addr.on"] = false
+    focus()
+end
+
 local function list(path, keep_history)
+    addr_close()
     -- Which way it goes, for the scene: in (deeper), out (up), or elsewhere.
     local old = s.path
     if path ~= old then
@@ -636,6 +645,23 @@ local function on_line(line)
             text["status.line"] = string.format("%s · %d %s", tr("All read"), done, tr("files"))
         end
         text["status.file"] = (st.current and st.current ~= "") and basename(st.current) or string.format("%d %s", st.vectors or 0, tr("pieces in the index"))
+    elseif t == "where" then
+        if m.complete then
+            if m.text then text.location = m.text end
+            if (m.matches or 0) == 0 then
+                toast(tr("No folder starts like that"))
+            elseif m.matches > 1 then
+                toast(table.concat(m.names or {}, " · "))
+            end
+            focus("location")
+        elseif m.dir then
+            if m.select then s.picked = { [m.select] = true } end
+            if s.mode == "search" then clear_search() end
+            go(m.dir)
+        else
+            toast(tr("There is no such folder") .. ": " .. tostring(m.path))
+            focus("location")
+        end
     elseif t == "error" then
         if m.op == "list" then
             fact.loading = false
@@ -666,6 +692,25 @@ every(2000, function() send({ op = "status" }) end)
 on("go", function(k)
     local p = s.places[k + 1]
     if p then go(p.path) end
+end)
+
+on("addr_open", function()
+    if s.addr then return end
+    s.addr = true
+    s.editing = false
+    text.location = s.path == "/" and "/" or (s.path .. "/")
+    fact["addr.on"] = true
+    focus("location")
+end)
+
+on("addr_close", addr_close)
+
+on("addr_go", function()
+    send({ op = "where", text = text.location or "", base = s.path })
+end)
+
+on("addr_complete", function()
+    send({ op = "where", text = text.location or "", base = s.path, complete = true })
 end)
 
 on("crumb", function(k)
@@ -722,6 +767,7 @@ local function pressed(i, list_items)
 end
 
 on("tile", function(k)
+    addr_close()
     if k < 0 then
         focus()
         s.editing = false
@@ -1083,6 +1129,7 @@ end)
 
 -- Keys that move the choice: arrows, Enter, Backspace, Space, Home, End, Ctrl+A.
 on("key_nav", function(k)
+    if s.addr then return end
     local items = s.mode == "browse" and s.items or s.hits
     local n = #items
     local c = s.mode == "browse" and cols() or 1
@@ -1129,6 +1176,7 @@ end)
 
 -- Letters typed on the folder go to the search.
 on("key", function(name, typed)
+    if s.addr then return end
     if fact["ask.open"] or fact["menu.open"] or fact["cf.open"] or fact["ow.open"] or fact["pr.open"] or fact["settings.open"] then return end
     if name:find("+", 1, true) and name ~= "plus" then return end
     if typed and typed ~= "" and not s.editing and typed:match("^[%w%sáéíóúñüÁÉÍÓÚÑÜ%.%-_]$") and typed ~= " " then
