@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80" width="64" height="80">
+  <g id="rope" fill="none" stroke="#9ed6bd" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="1 5">
+    <path d="M32 0 L32 12"/>
+  </g>
+  <g id="anchor" fill="none" stroke="#9ed6bd" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="18" r="5"/>
+    <path d="M32 23 L32 70"/>
+    <path d="M22 34 L42 34"/>
+    <path d="M10 52 C12 64 22 70 32 70 C42 70 52 64 54 52"/>
+    <path d="M6 56 L10 50 L15 55"/>
+    <path d="M58 56 L54 50 L49 55"/>
+  </g>
+</svg>
