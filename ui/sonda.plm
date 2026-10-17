@@ -656,7 +656,7 @@ scene Sonda {
         clip box { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36 }
         row crumbrow { at: side + 124, 32; anchor: left middle; gap: 0
             for c in crumbs {
-                row cb { padding: 6, 9; corner: 8; gap: 8; cursor: pointer
+                row cb { padding: 6; corner: 8; gap: 8; cursor: pointer
                     text c.name { size: 13; weight: 560; color: if(c.at == crumbs.count - 1, ink, dim) }
                     text "›" { size: 13; color: faint; show: c.at < crumbs.count - 1 }
                     on press cb { emit crumb(c.at) }
@@ -725,7 +725,7 @@ scene Sonda {
         clip box { from: mx - 2, top + 4; size: if(mw >= 760, mw - 230, max(W - pane - 74 - 44 * (1 - pv) - mx, 40)), 36 }
         row { at: mx, top + 8; gap: 6
             repeat k in 0..7 {
-                row fc { padding: 6, 13; corner: 14; cursor: pointer; fill: if(filter == k, #284238, #1c2220)
+                row fc { padding: 6; corner: 14; cursor: pointer; fill: if(filter == k, #284238, #1c2220)
                     text pick(k, "All", "Pictures", "PDF", "Documents", "Sound", "Video", "Code") { size: 12; weight: 620; color: if(filter == k, ink, dim) }
                     on press fc { emit set_filter(k) }
                 }
