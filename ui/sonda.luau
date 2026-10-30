@@ -32,7 +32,7 @@ local s = {
     clip = nil, thumbs = {}, places = {}, home = "", trash = "",
     first = 0, token = 0, menu_index = nil, asking = nil, editing = false,
     lastpress = nil, lastpressed = false, refresh_due = false, status_due = false,
-    jobs = {}, drives = {}, mounting = {}, pick = nil, pickfilter = 1, apps = {}, writable = true,
+    jobs = {}, drives = {}, mounting = {}, scrolls = {}, scroll_px = 0, pick = nil, pickfilter = 1, apps = {}, writable = true,
 }
 
 local function send(t)
@@ -319,6 +319,12 @@ local function list(path, keep_history)
         elseif old:sub(1, #path + 1) == path .. "/" or path == "/" then s.navdir = -1
         else s.navdir = 0.6 end
     end
+    -- Where it was in the folder it leaves, for coming back to it (back and forward).
+    if s.path ~= "" and path ~= s.path then
+        s.scrolls[s.path] = s.scroll_px or 0
+        s.scroll_px = 0
+        s.back_to = keep_history and s.scrolls[path] or nil
+    end
     if s.path ~= "" and path ~= s.path and not keep_history then
         s.back[#s.back + 1] = s.path
         s.fwd = {}
@@ -433,6 +439,17 @@ local function on_line(line)
         fact.loading = false
         s.items = m.items or {}
         if not m.keep then s.first = 0 end
+        -- Back in a folder: where it was (once the scene knows how long it is).
+        local back_to = not m.keep and s.back_to
+        s.back_to = nil
+        if back_to and back_to > 0 then
+            s.first = math.max(math.floor(back_to / tile_h()) - 2, 0)
+            s.scroll_px = back_to
+            after(120, function()
+                fact["grid.at"] = back_to
+                fact["grid.back"] = fact["grid.back"] + 1
+            end)
+        end
         if not m.keep and s.navdir then
             fact["nav.dir"] = s.navdir
             fact["nav.gen"] = fact["nav.gen"] + 1
@@ -968,6 +985,7 @@ on("look_act", function(k)
 end)
 
 on("slid", function(scroll)
+    s.scroll_px = scroll
     local first = math.max(math.floor(scroll / tile_h()) - 2, 0)
     if math.abs(first - s.first) >= 2 then
         s.first = first

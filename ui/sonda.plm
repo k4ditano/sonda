@@ -254,6 +254,8 @@ scene Sonda {
     event stop_player ->
     fact grid.to = 0                     // the logic: this row's top in sight…
     fact grid.go = 0                     // …now
+    fact grid.at = 0                     // the logic: back where it was in a folder gone back to…
+    fact grid.back = 0                   // …now
     event settings_open ->
     event settings_act ->               // 0 add here · 1 add here as code · 100+k drop folder k · 200+k drop code folder k · 9 done
     event drive ->                       // a drive pressed: index
@@ -540,6 +542,9 @@ scene Sonda {
             }
         }
         on change floor(grid.scroll / tile.h) { emit slid(grid.scroll) }
+        // Another folder starts at its top (and one gone back to, where it was: the logic says it a moment later).
+        on change nav.gen { grid.scroll: 0 }
+        on change grid.back { grid.scroll: clamp(grid.at, 0, max(grid.content - mh, 0)) }
         // Only if it is not in sight already, and never past the folder's end:
         // a folder of four lines does not scroll at all.
         on change grid.go {
@@ -611,6 +616,7 @@ scene Sonda {
                 }
             }
         }
+        on change found.gen { found.scroll: 0 }
         box { from: mx + mw + 2, my + found.scroll / max(found.content, 1) * mh; size: 3, mh * mh / max(found.content, mh); corner: 1.5; color: ink; opacity: if(found.content > mh, 22%, 0) }
         text hits.line { at: mx + mw - 4, top + 22; anchor: right center; size: 11.5; color: faint; show: false }
         // Nothing found, honestly.

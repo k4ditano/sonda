@@ -249,6 +249,37 @@ fn handle(req: &Value, out: &Arc<Out>, thumbs: &Arc<Thumbs>, jobs: &Arc<jobs::Jo
                 Err(e) => out.send(json!({ "t": "error", "op": "list", "path": path.to_string_lossy(), "error": e.to_string() })),
             }
         }
+        // Looking for a name in the folder and those inside it (as a list, with
+        // where each one is, from the folder looked in), apart: a big folder takes a moment.
+        "find" => {
+            let generation_id = thumbs.generation.fetch_add(1, Ordering::Relaxed) + 1;
+            let dir = PathBuf::from(req["path"].as_str().unwrap_or("/"));
+            let query = req["q"].as_str().unwrap_or("").to_owned();
+            let hidden = req["hidden"].as_bool().unwrap_or(false);
+            let id = req["id"].clone();
+            let globs = strs(&req["filter"]["globs"]);
+            let mimes = strs(&req["filter"]["mimes"]);
+            let out = out.clone();
+            let thumbs = thumbs.clone();
+            std::thread::spawn(move || {
+                let (mut items, more) = files::find(&dir, &query, hidden, 400);
+                if !globs.is_empty() || !mimes.is_empty() {
+                    items.retain(|e| e.dir || crate::apps::passes(Path::new(&e.path), &globs, &mimes));
+                }
+                let wanted: Vec<(String, String)> = items.iter().map(|e| (e.path.clone(), e.kind.clone())).collect();
+                let rows: Vec<Value> = items
+                    .iter()
+                    .map(|e| {
+                        let mut v = json!(e);
+                        let parent = Path::new(&e.path).parent().unwrap_or(&dir);
+                        v["folder"] = json!(parent.strip_prefix(&dir).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default());
+                        v
+                    })
+                    .collect();
+                out.send(json!({ "t": "found", "id": id, "gen": generation_id, "path": dir.to_string_lossy(), "q": query, "items": rows, "more": more }));
+                want_thumbs(&thumbs, generation_id, &wanted);
+            });
+        }
         "search" => {
             let generation_id = thumbs.generation.fetch_add(1, Ordering::Relaxed) + 1;
             let mut q = req.clone();

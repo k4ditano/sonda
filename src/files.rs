@@ -157,6 +157,79 @@ pub fn list(dir: &Path, hidden: bool, sort: &str) -> Result<Vec<Entry>> {
     Ok(out)
 }
 
+/// A name as it is compared when looked for: small letters, without accents.
+pub fn folded(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ä' | 'ã' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
+}
+
+/// Whether a name answers what was written: each of its words in it (in any
+/// order, accents and case not counting), or, with `*` or `?`, the whole name
+/// as that pattern.
+pub fn name_matches(name: &str, query: &str) -> bool {
+    let (name, query) = (folded(name), folded(query.trim()));
+    if query.contains(['*', '?']) {
+        let re = regex::escape(&query).replace("\\*", ".*").replace("\\?", ".");
+        return regex::Regex::new(&format!("^{re}$")).is_ok_and(|r| r.is_match(&name));
+    }
+    let words: Vec<&str> = query.split_whitespace().collect();
+    !words.is_empty() && words.iter().all(|w| name.contains(w))
+}
+
+/// Looking for a name in a folder and in those inside it (not in what is
+/// hidden unless `hidden`, nor in a project's `.git` or `node_modules`):
+/// the nearest first, the names that begin with it before the others; at most
+/// `limit`, and whether there was more (or it took too long to look at it all).
+pub fn find(dir: &Path, query: &str, hidden: bool, limit: usize) -> (Vec<Entry>, bool) {
+    let started = std::time::Instant::now();
+    let mut found: Vec<(usize, Entry)> = Vec::new();
+    let mut more = false;
+    let walk = ignore::WalkBuilder::new(dir)
+        .hidden(!hidden)
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false)
+        .ignore(false)
+        .parents(false)
+        .follow_links(false)
+        .filter_entry(|e| !matches!(e.file_name().to_str(), Some(".git" | "node_modules")))
+        .build();
+    for e in walk.flatten() {
+        if e.depth() == 0 {
+            continue;
+        }
+        if found.len() >= limit * 4 || started.elapsed() > std::time::Duration::from_millis(2500) {
+            more = true;
+            break;
+        }
+        if name_matches(&e.file_name().to_string_lossy(), query) {
+            if let Some(entry) = entry(e.path()) {
+                found.push((e.depth(), entry));
+            }
+        }
+    }
+    let first = folded(query.trim());
+    found.sort_by(|(da, a), (db, b)| {
+        let (sa, sb) = (folded(&a.name).starts_with(&first), folded(&b.name).starts_with(&first));
+        sb.cmp(&sa).then(da.cmp(db)).then_with(|| b.dir.cmp(&a.dir)).then_with(|| natural(&a.name, &b.name))
+    });
+    if found.len() > limit {
+        found.truncate(limit);
+        more = true;
+    }
+    (found.into_iter().map(|(_, e)| e).collect(), more)
+}
+
 /// «foto 2» before «foto 10», and case not counting.
 fn natural(a: &str, b: &str) -> std::cmp::Ordering {
     let (a, b) = (a.to_lowercase(), b.to_lowercase());
@@ -837,5 +910,40 @@ mod exec {
             c.env(k, v);
         }
         c.exec()
+    }
+}
+
+#[cfg(test)]
+mod find_tests {
+    use super::*;
+
+    #[test]
+    fn a_name_is_found_by_its_words_or_a_pattern() {
+        assert!(name_matches("Factura Enero 2026.pdf", "factura 2026"));
+        assert!(name_matches("Canción del mar.mp3", "cancion mar"));
+        assert!(!name_matches("Factura Enero.pdf", "factura marzo"));
+        assert!(name_matches("informe.final.PDF", "*.pdf"));
+        assert!(!name_matches("informe.pdf.txt", "*.pdf"));
+        assert!(name_matches("foto1.png", "foto?.png"));
+        assert!(!name_matches("algo", "   "));
+    }
+
+    #[test]
+    fn a_folder_is_looked_in_nearest_first() {
+        let root = std::env::temp_dir().join(format!("sonda-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("a/b/.oculta")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules")).unwrap();
+        for f in ["a/b/factura-vieja.pdf", "factura.pdf", "a/mi factura.pdf", "a/b/.oculta/factura.pdf", "node_modules/factura.js", "otra.txt"] {
+            std::fs::write(root.join(f), "x").unwrap();
+        }
+        let (found, more) = find(&root, "factura", false, 10);
+        let names: Vec<&str> = found.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["factura.pdf", "factura-vieja.pdf", "mi factura.pdf"]);
+        assert!(!more);
+        assert_eq!(find(&root, "factura", true, 10).0.len(), 4);
+        let (one, more) = find(&root, "factura", false, 1);
+        assert_eq!((one.len(), more), (1, true));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }
