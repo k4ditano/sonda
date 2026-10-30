@@ -1,44 +1,75 @@
 // Sonda: your files, and a sounder that finds them by what is in them.
 //
-// One window: the folders on the left, where you are on top, what is there
-// in the middle —or, while you search, what was found, whatever kind of file
-// it is: a photo by what it shows, a PDF at its page, a video at its minute,
-// code at its line—, and a look at the one chosen on the right.
+// One window, in the look of the desktop it is on (Calima's Taller, when its
+// shell says one): the places on the left, tabs and where you are on top,
+// what is there in the middle —as tiles, as a list with its columns, or as
+// columns going down a tree—, and a look at the one chosen on the right.
+// Writing looks for a name here and in what is inside; Tab turns it into a
+// search by what the files hold, whatever kind they are: a photo by what it
+// shows, a PDF at its page, a video at its minute, code at its line.
 //
 // The logic (sonda.luau) talks to `sonda bridge`, which does the work: the
 // folders, the small pictures, the copies, the trash; and asks the daemon
 // that reads everything with EmbeddingGemma 2 for the searches.
 language 0.4
 scene Sonda {
-    surface { size: 1280, 820; kind: window; title: "Sonda"; keyboard: on_demand }
+    surface { size: 1280, 820; kind: window; title: "Sonda"; app_id: "sonda"; keyboard: on_demand }
     permissions { run: "sonda", "wl-copy", "ffplay"; services: "env", "clipboard" }
     // A player inside the look: under pleamar-wm the window holds a compositor
     // of its own, and ffplay plays there, at the moment that was found.
     windows win max 2
 
-    // The water it sits in, a sonar ping, water filling a job; an anchor for an empty folder.
-    shader deep = file "shaders/deep.wgsl"
-    shader ping = file "shaders/ping.wgsl"
-    shader fill = file "shaders/fill.wgsl"
-    figure anchor = file "art/anchor.svg"
+    // Calima's letters: Newsreader for titles and figures, Manrope for the
+    // rest, JetBrains Mono for what is data. The grains: a glyph of five by five
+    // for what a file is, and a row of them for how much.
+    font file "fonts/Newsreader-Variable.ttf"
+    font file "fonts/Manrope-Variable.ttf"
+    font file "fonts/JetBrainsMono-Variable.ttf"
+    shader glyph = file "shaders/glyph.wgsl"
+    shader grains = file "shaders/grains.wgsl"
 
-    let ink = #f2f5f3
-    let mint = #9ed6bd
-    let deep = #0d1110
-    let coal = #121615
-    let card = #1a1f1d
-    let line.c = #2a312e
-    let dim = #9aa5a1
-    let faint = #6b7672
+    // ── the look: the desktop's, when it says one (the logic reads it) ──
+    // Its accent, what it is drawn on, its ink; dark or light; how round.
+    fact th.ar = 0.498
+    fact th.ag = 0.722
+    fact th.ab = 0.643
+    fact th.or = 0.110
+    fact th.og = 0.157
+    fact th.ob = 0.141
+    fact th.sr = 0.153
+    fact th.sg = 0.173
+    fact th.sb = 0.165
+    fact th.ir = 0.882
+    fact th.ig = 0.906
+    fact th.ib = 0.898
+    fact th.dk = 1
+    fact th.round = 1
+    let acc = rgb(th.ar, th.ag, th.ab)
+    let on_acc = rgb(th.or, th.og, th.ob)
+    let surf = rgb(th.sr, th.sg, th.sb)
+    let ink = rgb(th.ir, th.ig, th.ib)
+    // Dark: the surface sunk into the night, as Calima's mist; light: the surface as it is.
+    let bg = mix(surf, mix(#000000, surf, 0.7), th.dk)
+    let side.c = mix(mix(surf, ink, 0.035), mix(#000000, surf, 0.58), th.dk)
+    let pane.c = mix(mix(surf, ink, 0.02), mix(#000000, surf, 0.64), th.dk)
+    let bruma = mix(mix(surf, ink, 0.05), mix(#000000, surf, 0.5), th.dk)
+    let tile.c = mix(bg, ink, 0.05)
+    let tile.hi = mix(bg, ink, 0.085)
+    let dim = mix(ink, bg, 0.36)
+    let faint = mix(ink, bg, 0.58)
+    let amber = #e8c26a
+    let coral = #ef7a66
+    // Corners: round, soft or square, as the Taller says.
+    let R = pick(th.round, 12, 9, 4)
+    let Rs = pick(th.round, 9, 7, 3)
+    let gr = pick(th.round, 1, 0.45, 0)
     let W = screen.width
     let H = screen.height
 
     // ── the shape of the window ──
-    // The folders: narrow, only their icons (a window in a tiling layout can
-    // be given 450 px).
+    // The places: narrow, only their glyphs (a window in a tiling layout can be given 450 px).
     let slim = W < 760
-    let side = if(slim, 64, if(W < 1000, 200, 232))
-    let top = 64                         // where you are, and the search
+    let side = if(slim, 64, 224)
     fact preview.on = true               // the look on the right
     // Picking for another program (its «Open» or «Save» dialog): a bar at the bottom.
     fact pick.on = false
@@ -49,18 +80,22 @@ scene Sonda {
     let pickbar = if(pick.on, 66, 0)
     prop pv = 1 ~calm
     follow pv = if(preview.on and W >= 1000, 1, 0)
-    let pane.full = if(W < 1150, 290, 340)
+    let pane.full = if(W < 1150, 280, 300)
     let pane = pane.full * pv            // the look's width, as it comes and goes
-    let mx = side + 20                   // the middle starts
-    let mw = W - side - pane - 40        // and is this wide
-    let my = top + 54                    // under the filters
-    let mh = H - my - 14 - pickbar
+    let mx = side + 16                   // the middle starts
+    let mw = W - side - pane - 32        // and is this wide
+    let my = 160                         // under the header and its line
+    let mh = H - my - 10 - pickbar
+    let hy = 144                         // the header's line
 
     // ── what the logic says ──
     fact mode: browse | search = browse
-    fact view: grid | lines = grid
+    fact view: grid | lines | columns = grid
+    fact skind: name | content = name    // what writing looks for: names, or what files hold
+    fact finding = false                 // the names found are shown (instead of the folder)
+    fact group.on = true                 // the list in groups (by day, by kind)
     fact cols = 6                        // tiles across, as the middle is wide
-    fact total = 0                       // in the folder (rows of tiles)
+    fact total = 0                       // in the folder (rows)
     fact first = 0                       // the first row the slice holds
     fact count = 0                       // things in the folder
     fact loading = false
@@ -98,6 +133,8 @@ scene Sonda {
     fact look.media = false              // sound or video: it can be played
     fact look.pdf = false
     fact look.action = 0                 // what «open there» says: 0 line · 1 page · 2 play
+    fact look.lo = 0                     // its glyph, when it has no picture
+    fact look.hi = 0
     fact playing = false                 // the player is in the look
     fact can.play = false                // there is a compositor here to hold it
     fact look.code = false
@@ -135,6 +172,10 @@ scene Sonda {
     fact pr.used = 0
     fact pr.link = false
     fact here.read = false               // the folder shown is read already (or is inside one)
+    fact sys.used = 0                    // how full the system's disk is
+    fact tab.on = 0                      // the tab in front
+    fact q.empty = true                  // nothing written in the search
+    fact fhint.on = false                // the line under the names found
 
     text location = ""                  // the location bar's path
     text folder.name = ""
@@ -145,6 +186,7 @@ scene Sonda {
     text hits.line = ""
     text look.name = ""
     text look.kindname = ""
+    text look.label = ""                 // «PICTURE · PNG», over the look
     text look.meta = ""
     text look.place = ""
     text look.folder = ""
@@ -174,31 +216,62 @@ scene Sonda {
     text pr.owner = ""
     text pr.free = ""
     text pr.linkto = ""
+    text sel.size = ""                   // what the chosen ones take
+    text read.num = "0"                  // how many it has read, as a person writes it
+    text sys.free = ""
+    text sys.name = ""
+    text fhint = ""                  // under the names found: Tab, for what they hold
 
     model readf max 12 { name: text; path: text }
     model codef max 8 { name: text; path: text }
-    model places max 12 { name: text; path: text; icon: image 18, 18; here: bool }
-    model drives max 8 { name: text; size: text; icon: image 18, 18; mounted: bool; here: bool; busy: bool }
-    model menu max 20 { k: number; label: text; keys: text; danger: bool; sep: bool }
+    model places max 12 { name: text; path: text; lo: number; hi: number; here: bool }
+    model pins max 10 { name: text; path: text; here: bool }
+    model drives max 8 { name: text; size: text; free: text; used: number; mounted: bool; here: bool; busy: bool; removable: bool }
+    model tabs max 8 { name: text; here: bool; lo: number; hi: number }
+    model menu max 22 { k: number; label: text; keys: text; danger: bool; sep: bool }
     model jobs max 4 { id: number; title: text; line: text; frac: number }
     model apps max 60 { name: text; icon: image 28, 28; rec: bool; def: bool; head: bool }
     model pricon max 1 { icon: image 56, 56 }
     model crumbs max 14 { name: text; path: text; at: number }
+    model lookkv max 7 { k: text; v: text; mono: bool }
     model rows max 30 {
+        head: text
+        ishead: bool
         list cells max 10 {
             at: number
             name: text
+            nm: text                     // the name with its extension apart, as markdown
             path: text
             kind: text
+            ext: text
             video: bool
             dir: bool
             thumb: image 168, 126
             has.thumb: bool
-            icon: image 64, 64
+            lo: number
+            hi: number
             picked: bool
             size: text
+            sz: number                   // how big, in grains (0–10)
             date: text
+            kname: text
+            folder: text                 // found by its name: where, from the folder looked in
             hidden: bool
+            n: number                    // a folder: what it holds
+        }
+    }
+    // Columns going down a tree: the folders above, each with the one taken lit.
+    model mcol max 4 {
+        path: text
+        list ents max 300 {
+            col: number
+            at: number
+            name: text
+            path: text
+            dir: bool
+            lo: number
+            hi: number
+            on: bool
         }
     }
     model hits max 60 {
@@ -206,11 +279,13 @@ scene Sonda {
         path: text
         kind: text
         place: text
+        hasplace: bool
         folder: text
         excerpt: text
         thumb: image 120, 90
         has.thumb: bool
-        icon: image 40, 40
+        lo: number
+        hi: number
         picked: bool
         strength: number
         date: text
@@ -218,6 +293,8 @@ scene Sonda {
     image look.pic = from look.picture, 640, 480
 
     event go ->                          // a place, by its index
+    event go_pin ->                      // a pinned folder
+    event go_system ->                   // the system's disk
     event crumb ->                       // a crumb, by its index
     event addr_open ->                   // the crumbs become the path, to write in
     event addr_close ->
@@ -234,15 +311,18 @@ scene Sonda {
     event hit_open ->
     event hit_menu ->
     event act ->                         // a menu item
-    event slid ->                        // the grid scrolled: where
+    event slid ->                        // the list scrolled: where
     event set_cols ->
-    event set_view ->
+    event set_view ->                    // 0 grid · 1 list · 2 columns
+    event set_mcols ->                   // how many columns fit
     event set_sort ->
     event set_scope ->
     event set_filter ->
+    event set_skind ->                   // 0 names · 1 what files hold
+    event toggle_group ->
     event toggle_hidden ->
     event toggle_preview ->
-    event look_act ->                    // 0 open · 1 open there · 2 show in its folder · 3 copy the path
+    event look_act ->                    // 0 open · 1 open there · 2 show in its folder · 3 copy the path · 4 its menu
     event answered ->
     event ask_cancel ->
     event pause_toggle ->
@@ -250,8 +330,16 @@ scene Sonda {
     event key_nav ->
     event clear_search ->
     event search_now ->
+    event tab_key ->                     // Tab, outside the location bar
     event typed ->
     event stop_player ->
+    event colent ->                      // a column's entry: column × 1000 + its place
+    event colent_menu ->
+    event tab_go ->                      // a tab, by its index
+    event tab_close ->
+    event tab_new ->
+    event tab_step ->                    // the next (1) or the one before (−1)
+    event sel_clear ->
     fact grid.to = 0                     // the logic: this row's top in sight…
     fact grid.go = 0                     // …now
     fact grid.at = 0                     // the logic: back where it was in a folder gone back to…
@@ -271,267 +359,524 @@ scene Sonda {
     event pick_accept ->
     event pick_cancel ->
     event pick_filter ->                 // the next filter
-    event splash                         // a job done: bubbles
-    event sank                           // the anchor reached the bottom of an empty folder
+    event splash                         // a job done
 
-    // ── the background: water, lighter towards the surface, light coming down ──
-    // It moves only when something happens (a folder, a search): `tide` travels and rests.
-    prop tide = 0 ~2400ms
-    on change nav.gen { tide: tide + 0.55 }
-    on change found.gen { tide: tide + 0.35 }
-    shader deep { at: 0, 0; size: W, H; values: tide; colors: #060a09, #14302a }
+    // ── what it sits on ──
+    box { from: 0, 0; size: W, H; color: bg }
 
-    // A ping when a search goes out: from the search's sounder, across the window.
-    prop pingt = 1 ~1500ms
-    on change searching while searching { pingt: 0 ~0ms; pingt: 1 after 16ms }
-    shader ping { at: 0, 0; size: W, H; values: pingt, W - clamp((W - if(W < 1000, 200, 232)) * 0.42, 220, 440) - 18 + 22, 32, 1; colors: mint; show: pingt < 0.995 }
+    // ═════════════════ the places ═════════════════
+    box { from: 0, 0; size: side, H; color: side.c }
+    box { from: side, 0; size: 1, H; color: ink; opacity: 7% }
 
-    // ═════════════════ the folders ═════════════════
-    // Glass drawn, not glass bent: a tint with the lit edge of glass. Under 30 %
-    // of glass (times opacity) nothing behind is copied or blurred, and real
-    // glass was half of each frame's painting and twice the memory on the card.
-    body {
-        color: #0a1411
-        opacity: 72%
-        glass: 41%
-        rim: 10%
-        border: 1, #314d46
-        box { from: 0, 0; size: side, H }
-    }
-    box { from: side, 0; size: 1, H; color: ink; opacity: 6% }
-
-    // The sounder: rings going out from a point, while it reads.
-    prop ping = 0 ~calm
-    follow ping = if(read.on, 1, 0)
-    prop ring = 1 ~1400ms
-    every 1700ms while read.on {
-        ring: 0 ~0ms
-        ring: 1 ~1400ms after 16ms
-    }
+    // Sonda's mark: a ring of grains, its sounder; while it reads, its grains go round.
+    prop spin = 0 ~1200ms
+    every 1200ms while read.on { spin: spin + 1 }
     group {
-        let sx = if(slim, 26, 40)
-        let sy = 36
-        ellipse { at: sx, sy; radius: 4.2; color: mint }
-        arc { at: sx, sy; radius: 10; width: 2; span: 110deg; rotate: 90deg; color: mint; opacity: 85% }
-        arc { at: sx, sy; radius: 16; width: 2; span: 90deg; rotate: 90deg; color: mint; opacity: 55% }
-        arc { at: sx, sy; radius: 22; width: 2; span: 70deg; rotate: 90deg; color: mint; opacity: 28% }
-        // Going out, only while it reads (so it rests otherwise).
-        group {
-            show: ping > 0.02 and ring < 0.99
-            opacity: ping
-            ellipse { at: sx, sy; radius: 6 + 20 * ring; stroke: 1.5; color: mint; opacity: 70% * (1 - ring) }
-        }
-        // And with each search that goes out.
-        ellipse { at: sx, sy; radius: 6 + 26 * pingt; stroke: 1.8; color: mint; opacity: 80% * (1 - pingt); show: pingt < 0.99 }
+        let lx = if(slim, 20, 20)
+        shader glyph { at: lx, 17; size: 25, 25; values: 17966, 465, 5, 3.6, gr, 95%, 22%; colors: acc, ink }
+        ellipse { at: lx + 12.5 + 9 * cos(spin * 90 - 90), 29.5 + 9 * sin(spin * 90 - 90); radius: 2.2; color: acc; show: read.on }
+        text "Sonda" { at: 54, 29; anchor: left center; size: 23; weight: 450; family: "Newsreader"; color: ink; show: not slim }
     }
-    text "Sonda" { at: 74, 36; anchor: left center; size: 19; weight: 750; color: ink; show: not slim }
 
     // Never under the reading card: what does not fit is cut, not overlapped.
+    let cardh = if(slim, 44, 128)
+    let room = H - cardh - 24
+    component Label(t: text, y: number) {
+        text t { at: 22, y; anchor: left center; size: 10.5; weight: 500; family: "JetBrains Mono"; color: faint; show: not slim }
+        box { from: 18, y; size: side - 36, 1; color: ink; opacity: 8%; show: slim }
+    }
     group {
-    let room = H - 54 - 66 * cardk - 8      // down to the reading card
-    clip box { from: 0, 76; size: side, max(floor((room - 76) / 36) * 36 + 6, 0) }
-    column placelist { at: 12, 82; gap: 2
-        for p in places {
-            group {
-                size: side - 24, 34
-                zone box place { from: 0, 0; size: side - 24, 34; corner: 9; cursor: pointer; label: "{p.name}"; role: item; selected: p.here }
-                box { from: 0, 0; size: side - 24, 34; corner: 9; color: mint; opacity: 15% * p.here + 6% * place.hover * (1 - p.here) }
-                box { from: 0, 8; size: 3, 18; corner: 1.5; color: mint; opacity: p.here }
-                image p.icon { at: if(slim, 11, 14), 8; size: 18, 18; opacity: 90% }
-                text p.name { at: 42, 17; anchor: left center; size: 13; weight: 560; color: mix(dim, ink, max(p.here, place.hover)); show: not slim }
-                on press place { emit go(p.index) }
-                // Something dropped on a place goes there.
-                on drop place { emit dropped(-100 - p.index) }
+        clip box { from: 0, 60; size: side, max(room - 60, 0) }
+        Label("PLACES", 79)
+        column placelist { at: 12, 94; gap: 0
+            for p in places {
+                group {
+                    size: side - 24, 36
+                    zone box place { from: 0, 0; size: side - 24, 34; corner: Rs; cursor: pointer; label: "{p.name}"; role: item; selected: p.here }
+                    box { from: 0, 0; size: side - 24, 34; corner: Rs; color: ink; opacity: 7% * p.here + 4% * place.hover * (1 - p.here) }
+                    box { from: 0, 0; size: side - 24, 34; corner: Rs; stroke: 1; color: ink; opacity: 8% * p.here }
+                    shader glyph { at: if(slim, 12, 12), 9; size: 16, 16; values: p.lo, p.hi, 3.2, 2.4, gr, if(p.here, 95%, 70%), 0%; colors: if(p.here, acc, ink), ink }
+                    text p.name { at: 39, 17; anchor: left center; size: 14; weight: 500; family: "Manrope"; color: mix(dim, ink, max(p.here, place.hover)); show: not slim }
+                    on press place { emit go(p.index) }
+                    on drop place { emit dropped(-100 - p.index) }
+                }
             }
         }
-    }
-
-    // Drives: sticks and the other disks. Pressed, mounted and opened; ejected with their button.
-    group {
-        // Only when all of them fit above the card: half a drive is no use.
-        show: drives.count > 0 and 82 + places.count * 36 + 32 + drives.count * 36 <= room
-        let dy = 82 + places.count * 36 + 10
-        text "Drives" { at: 26, dy + 10; anchor: left center; size: 10.5; weight: 700; color: faint; show: not slim }
-        box { from: 18, dy + 10; size: side - 36, 1; color: ink; opacity: 10%; show: slim }
-        column drivelist { at: 12, dy + 22; gap: 2
-            for d in drives {
-                group {
-                    size: side - 24, 34
-                    zone box drv { from: 0, 0; size: side - 24, 34; corner: 9; cursor: pointer; label: "{d.name}"; role: item; selected: d.here }
-                    box { from: 0, 0; size: side - 24, 34; corner: 9; color: mint; opacity: 15% * d.here + 6% * drv.hover * (1 - d.here) }
-                    box { from: 0, 8; size: 3, 18; corner: 1.5; color: mint; opacity: d.here }
-                    image d.icon { at: if(slim, 11, 14), 8; size: 18, 18; opacity: if(d.mounted, 90%, 50%) }
-                    text d.name { at: 42, 17; anchor: left center; size: 13; weight: 560; width: side - 110; lines: 1; color: mix(if(d.mounted, dim, faint), ink, max(d.here, drv.hover)); show: not slim }
-                    // Mounting: a little ring; mounted: eject.
-                    arc { at: side - 46, 17; radius: 6; width: 1.8; span: 240deg; rotate: turn * 1deg; color: mint; show: d.busy }
+        // Pinned: the desktop's bookmarks.
+        let py0 = 94 + places.count * 36 + 14
+        group {
+            show: pins.count > 0
+            Label("PINNED", py0)
+            column pinlist { at: 12, py0 + 14; gap: 0
+                for q in pins {
                     group {
-                        show: d.mounted and not d.busy and not slim
-                        zone box ej { from: side - 60, 5; size: 26, 24; corner: 8; cursor: pointer; label: "Eject {d.name}" }
-                        box { from: side - 60, 5; size: 26, 24; corner: 8; color: ink; opacity: 10% * ej.hover }
-                        path { at: side - 47, 15; color: mix(dim, ink, ej.hover); move -5, 2; line 0, -3; line 5, 2; close }
-                        box { from: side - 52, 20; size: 10, 1.8; corner: 0.9; color: mix(dim, ink, ej.hover) }
-                        on press ej { emit eject(d.index) }
+                        size: side - 24, 36
+                        zone box pin { from: 0, 0; size: side - 24, 34; corner: Rs; cursor: pointer; label: "{q.name}"; role: item; selected: q.here }
+                        box { from: 0, 0; size: side - 24, 34; corner: Rs; color: ink; opacity: 7% * q.here + 4% * pin.hover * (1 - q.here) }
+                        box { from: 0, 0; size: side - 24, 34; corner: Rs; stroke: 1; color: ink; opacity: 8% * q.here }
+                        shader glyph { at: 12, 9; size: 16, 16; values: 4004, 140, 3.2, 2.4, gr, if(q.here, 95%, 70%), 0%; colors: if(q.here, acc, ink), ink }
+                        text q.name { at: 39, 17; anchor: left center; size: 14; weight: 500; family: "Manrope"; color: mix(dim, ink, max(q.here, pin.hover)); width: side - 70; lines: 1; show: not slim }
+                        on press pin { emit go_pin(q.index) }
+                        on drop pin { emit dropped(-400 - q.index) }
                     }
-                    on press drv { emit drive(d.index) }
-                    on drop drv { emit dropped(-300 - d.index) }
+                }
+            }
+        }
+        // Disks: the system's, and sticks and the other disks (pressed, mounted
+        // and opened; ejected with their button). How full, in grains.
+        let dy0 = py0 + if(pins.count > 0, 14 + pins.count * 36 + 14, 0)
+        group {
+            show: not slim
+            Label("DISKS", dy0)
+            group {
+                let y1 = dy0 + 14
+                zone box sysd { from: 12, y1; size: side - 24, 44; corner: Rs; cursor: pointer; label: "{sys.name}"; role: item }
+                box { from: 12, y1; size: side - 24, 44; corner: Rs; color: ink; opacity: 4% * sysd.hover }
+                text sys.name { at: 22, y1 + 15; anchor: left center; size: 14; weight: 500; family: "Manrope"; color: mix(dim, ink, sysd.hover) }
+                text sys.free { at: side - 22, y1 + 15; anchor: right center; size: 11; family: "JetBrains Mono"; color: faint }
+                shader grains { at: 22, y1 + 28; size: side - 44, 8; values: floor((side - 44) / 7), sys.used * floor((side - 44) / 7), 7, 4.4, gr, 80%, 18%; colors: if(sys.used > 0.9, coral, ink), ink }
+                on press sysd { emit go_system }
+            }
+            column drivelist { at: 12, dy0 + 62; gap: 0
+                for d in drives {
+                    group {
+                        size: side - 24, 46
+                        zone box drv { from: 0, 0; size: side - 24, 44; corner: Rs; cursor: pointer; label: "{d.name}"; role: item; selected: d.here }
+                        box { from: 0, 0; size: side - 24, 44; corner: Rs; color: ink; opacity: 7% * d.here + 4% * drv.hover * (1 - d.here) }
+                        text d.name { at: 10, 15; anchor: left center; size: 14; weight: 500; family: "Manrope"; width: side - 100; lines: 1; color: mix(if(d.mounted, dim, faint), ink, max(d.here, drv.hover)) }
+                        text d.free { at: side - 58, 15; anchor: right center; size: 11; family: "JetBrains Mono"; color: faint; show: d.mounted }
+                        text d.size { at: side - 58, 15; anchor: right center; size: 11; family: "JetBrains Mono"; color: faint; show: not d.mounted }
+                        shader grains { at: 10, 28; size: side - 44, 8; values: floor((side - 44) / 7), d.used * floor((side - 44) / 7), 7, 4.4, gr, if(d.mounted, 80%, 35%), 18%; colors: if(d.used > 0.9, coral, ink), ink }
+                        // Mounting: a ring turning; mounted: eject.
+                        arc { at: side - 40, 15; radius: 6; width: 1.8; span: 240deg; rotate: turn * 1deg; color: acc; show: d.busy }
+                        group {
+                            show: d.mounted and not d.busy
+                            zone box ej { from: side - 52, 3; size: 24, 24; corner: Rs; cursor: pointer; label: "Eject {d.name}" }
+                            box { from: side - 52, 3; size: 24, 24; corner: Rs; color: ink; opacity: 10% * ej.hover }
+                            path { at: side - 40, 13; color: mix(dim, ink, ej.hover); move -5, 2; line 0, -3; line 5, 2; close }
+                            box { from: side - 45, 18; size: 10, 1.8; corner: 0.9; color: mix(dim, ink, ej.hover) }
+                            on press ej { emit eject(d.index) }
+                        }
+                        on press drv { emit drive(d.index) }
+                        on drop drv { emit dropped(-300 - d.index) }
+                    }
                 }
             }
         }
     }
-    }
 
-    // How the reading goes: a card at the bottom of the folders. It opens only while
-    // there is something to tell —reading, paused, the reader not answering—; with
-    // everything read it folds into one line.
-    prop cardk = 1 ~calm
-    // Slim, only its dot: mint, or red when the reader does not answer.
-    follow cardk = if(not slim and (read.on or read.paused or read.pending > 0 or not read.reachable), 1, 0)
+    // How the reading goes: a card at the bottom of the places, in grains. Pressed:
+    // which folders it reads. Its corner pauses and resumes.
     group {
-        let cy = H - 54 - 66 * cardk
-        body {
-            color: card
-            rim: 10%
-            box { from: 12, cy; size: side - 24, 40 + 66 * cardk; corner: 14 }
-        }
-        group {
-            opacity: cardk * cardk
-            text "Reading" { at: 26, cy + 20; anchor: left center; size: 11; weight: 700; color: dim; show: read.reachable }
-            text "Not running" { at: 26, cy + 20; anchor: left center; size: 11; weight: 700; color: #ef7a66; show: not read.reachable }
-            // A bar: what is read of what there is.
-            box { from: 26, cy + 34; size: side - 52, 5; corner: 2.5; color: ink; opacity: 8% }
-            prop readbar = 0 ~calm
-            follow readbar = read.done / max(read.done + read.pending, 1)
-            box { from: 26, cy + 34; size: max((side - 52) * readbar, 5), 5; corner: 2.5; color: mint; opacity: if(read.paused, 45%, 90%) }
-            text status.line { at: 26, cy + 54; anchor: left center; size: 11.5; color: ink; width: side - 60; lines: 1 }
-            text status.file { at: 26, cy + 72; anchor: left center; size: 10.5; color: faint; width: side - 60; lines: 1 }
-            // Pause and go on.
-            zone box pausebtn { from: 26, H - 38; size: 92, 18; corner: 9; cursor: pointer; active: cardk > 0.9; label: pick(read.paused, "Pause reading", "Resume reading"); role: toggle; checked: read.paused }
-            text pick(read.paused, "❙❙  Pause", "▶  Resume") { at: 26, H - 29; anchor: left center; size: 11; weight: 650; color: mix(mint, ink, pausebtn.hover) }
-            on press pausebtn { emit pause_toggle }
-        }
-        // Folded: everything read.
-        group {
-            opacity: (1 - cardk) * (1 - cardk)
-            ellipse { at: if(slim, side / 2, 30), H - 34; radius: 3.5; color: if(read.reachable, mint, #ef7a66) }
-            text "Up to date" { at: 42, H - 34; anchor: left center; size: 11; weight: 650; color: dim; show: not slim }
-        }
-        // Which folders it reads.
+        let cy = H - cardh - 12
+        zone box rcard { from: 12, cy; size: side - 24, cardh; corner: R; cursor: pointer; label: "Folders it reads" }
+        box { from: 12, cy; size: side - 24, cardh; corner: R; color: mix(side.c, ink, 0.035 + 0.02 * rcard.hover) }
+        box { from: 12, cy; size: side - 24, cardh; corner: R; stroke: 1; color: ink; opacity: 8% }
+        on press rcard { emit settings_open }
+        ellipse { at: if(slim, side / 2, 29), cy + if(slim, cardh / 2, 21); radius: 3; color: if(read.reachable, if(read.paused, amber, acc), coral) }
         group {
             show: not slim
-            zone box foldersbtn { from: side - 104, H - 38 - 5 * (1 - cardk); size: 80, 18; corner: 9; cursor: pointer; label: "Folders it reads" }
-            text "Folders…" { at: side - 26, H - 29 - 5 * (1 - cardk); anchor: right center; size: 11; weight: 650; color: mix(dim, ink, foldersbtn.hover) }
-            on press foldersbtn { emit settings_open }
+            text pick(if(read.reachable, if(read.paused, 2, if(read.on, 0, 1)), 3), "SONDA READS", "UP TO DATE", "PAUSED", "NOT RUNNING") { at: 38, cy + 21; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+            measure readn
+            text read.num { at: 24, cy + 52; anchor: left center; size: 28; weight: 400; family: "Newsreader"; color: ink; measure: readn }
+            text "read" { at: 30 + readn.width, cy + 56; anchor: left center; size: 13; family: "Manrope"; color: dim }
+            prop readbar = 0 ~calm
+            follow readbar = read.done / max(read.done + read.pending, 1)
+            shader grains { at: 24, cy + 74; size: side - 48, 8; values: floor((side - 48) / 7), readbar * floor((side - 48) / 7), 7, 4.4, gr, if(read.paused, 45%, 85%), 18%; colors: ink, ink }
+            text status.line { at: 24, cy + 98; anchor: left center; size: 12; family: "Manrope"; color: dim; width: side - 48; lines: 1; markdown: true }
+            text status.file { at: 24, cy + 114; anchor: left center; size: 11; family: "Manrope"; color: faint; width: side - 48; lines: 1 }
+            // Pause and go on.
+            zone box pausebtn { at: side - 34, cy + 21; size: 24, 24; corner: Rs; cursor: pointer; active: read.reachable; label: pick(read.paused, "Pause reading", "Resume reading"); role: toggle; checked: read.paused }
+            box { at: side - 34, cy + 21; size: 24, 24; corner: Rs; color: ink; opacity: 8% * pausebtn.hover }
+            group {
+                show: not read.paused
+                box { at: side - 37, cy + 21; size: 2.6, 10; corner: 1; color: dim }
+                box { at: side - 31, cy + 21; size: 2.6, 10; corner: 1; color: dim }
+            }
+            path { at: side - 34, cy + 21; color: acc; show: read.paused; move -3, -5; line 5, 0; line -3, 5; close }
+            on press pausebtn { emit pause_toggle }
         }
     }
+
+    // ═════════════════ tabs ═════════════════
+    group {
+        clip box { from: side + 8, 6; size: W - side - 16, 40 }
+        row tabrow { at: side + 16, 29; anchor: left middle; gap: 8
+            for t in tabs {
+                row tb { padding: 7; corner: Rs; gap: 8; cursor: pointer; fill: mix(bg, ink, if(t.here, 0.1, 0.035))
+                    text t.name { size: 13.5; weight: if(t.here, 600, 500); family: "Manrope"; color: if(t.here, ink, dim) }
+                    row tx { padding: 1; corner: 6; cursor: pointer; show: tabs.count > 1
+                        text "×" { size: 13; family: "Manrope"; color: faint }
+                        on press tx { emit tab_close(t.index) }
+                    }
+                    on press tb { emit tab_go(t.index) }
+                    on press middle tb { emit tab_close(t.index) }
+                    on drop tb { emit dropped(-500 - t.index) }
+                }
+            }
+            row tplus { padding: 7; corner: Rs; cursor: pointer
+                text "+" { size: 15; family: "Manrope"; color: faint }
+                on press tplus { emit tab_new }
+            }
+        }
+    }
+
+    // ═════════════════ where you are ═════════════════
+    // Back, forward, up: three in one.
+    group {
+        let nx = side + 16
+        box { from: nx, 60; size: 102, 34; corner: Rs; color: tile.c }
+        box { from: nx, 60; size: 102, 34; corner: Rs; stroke: 1; color: ink; opacity: 9% }
+        component NavBtn(k: number, x: number, enabled: bool) {
+            group {
+                zone box b { from: x, 60; size: 34, 34; corner: Rs; cursor: pointer; active: enabled; label: pick(k, "Back", "Forward", "Up") }
+                box { from: x + 2, 62; size: 30, 30; corner: Rs - 2; color: ink; opacity: 8% * b.hover }
+                group {
+                    opacity: if(enabled, 85%, 25%)
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 0; move 6, 0; line -6, 0 }
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 0; move -1, -5; line -6, 0; line -1, 5 }
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 1; move -6, 0; line 6, 0 }
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 1; move 1, -5; line 6, 0; line 1, 5 }
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 2; move 0, 6; line 0, -6 }
+                    path { at: x + 17, 77; stroke: 1.8; color: ink; show: k == 2; move -5, -1; line 0, -6; line 5, -1 }
+                }
+                on press b { emit nav(k) }
+            }
+        }
+        NavBtn(0, nx, can.back)
+        NavBtn(1, nx + 34, can.forward)
+        NavBtn(2, nx + 68, can.up)
+    }
+
+    // The right side of the header: the search, how it is shown, more.
+    let menub = W - 16 - 36
+    let vx = menub - 12 - 102
+    let sw = clamp(W - side - 132 - 220 - (W - vx) - 12, 200, 340)
+    let sx0 = vx - 12 - sw
+    let tx0 = side + 132                 // the title starts
+    let tw = max(sx0 - tx0 - 16, 40)
+
+    // The crumbs (each a place to go back to), and the folder's name under them.
+    // A press on them (or Ctrl+L) turns them into the whole path, to write another.
+    group {
+        show: not addr.on
+        zone box crumbbg { from: tx0 - 6, 52; size: tw + 6, 48; corner: Rs; cursor: text; label: "Location" }
+        on press crumbbg { emit addr_open }
+        clip box { from: tx0, 50; size: tw, 52 }
+        row crumbrow { at: tx0, 62; anchor: left middle; gap: 0
+            for c in crumbs {
+                row cb { padding: 1; gap: 6; cursor: pointer
+                    text c.name { size: 11.5; family: "JetBrains Mono"; color: if(c.at == crumbs.count - 1, dim, faint) }
+                    text "/" { size: 11.5; family: "JetBrains Mono"; color: faint; show: c.at < crumbs.count - 1 }
+                    text " " { size: 11.5; family: "JetBrains Mono"; color: faint; show: c.at < crumbs.count - 1 }
+                    on press cb { emit crumb(c.at) }
+                    on drop cb { emit dropped(-200 - c.at) }
+                }
+            }
+        }
+        text folder.name { at: tx0, 85; anchor: left center; size: 29; weight: 400; family: "Newsreader"; color: ink; width: tw; lines: 1 }
+    }
+
+    // The location bar: where the crumbs were. Enter goes, Tab finishes a
+    // folder's name, Esc or a press elsewhere leaves it.
+    group {
+        show: addr.on
+        box { from: tx0 - 6, 58; size: tw + 6, 38; corner: Rs + 10; color: tile.c }
+        box { from: tx0 - 6, 58; size: tw + 6, 38; corner: Rs + 10; stroke: 1; color: acc; opacity: 60% }
+        input location { at: tx0 + 10, 77 - 8.45; width: tw - 24; size: 13; family: "JetBrains Mono"; color: ink; placeholder: "A folder: ~/Documents, /mnt/disk…"; label: "Location" }
+    }
+    on submit location { emit addr_go }
+
+    // The search: a name here and inside (writing anywhere starts it), or —Tab— what files hold.
+    prop sf = 0 ~quick
+    follow sf = if(mode == search or finding, 1, 0)
+    group {
+        let segw = if(sw >= 300, 172, 0)
+        box { from: sx0, 58; size: sw, 38; corner: 19; color: tile.c }
+        box { from: sx0, 58; size: sw, 38; corner: 19; stroke: 1; color: mix(ink, acc, sf); opacity: 10% + 40% * sf }
+        // A magnifying glass, or a sounder when it listens for what files hold.
+        group {
+            show: skind == name
+            ellipse { at: sx0 + 21, 75; radius: 5.5; stroke: 1.6; color: dim }
+            path { at: sx0 + 25, 79; stroke: 1.8; color: dim; move 0, 0; line 4, 4 }
+        }
+        group {
+            show: skind == content
+            repeat k in 0..5 {
+                box { at: sx0 + 14 + k * 3.6, 77; size: 2, pick(k, 6, 12, 16, 10, 5); corner: 1; color: acc }
+            }
+        }
+        text pick(skind, "Look here", "Describe it…") { at: sx0 + 38, 77; anchor: left center; size: 14; family: "Manrope"; color: faint; show: q.empty }
+        input query { at: sx0 + 38, 77 - 9.1; width: sw - 50 - segw; size: 14; family: "Manrope"; color: ink; label: "Search" }
+        // Searching: a ring turning.
+        arc { at: sx0 + sw - segw - 16, 77; radius: 6; width: 1.8; span: 240deg; rotate: turn * 1deg; color: acc; show: searching }
+        // Names, or what they hold.
+        group {
+            show: segw > 0
+            let gx = sx0 + sw - segw - 4
+            box { from: gx, 62; size: segw, 30; corner: 15; color: bg; opacity: 70% }
+            prop segk = 0 ~quick
+            follow segk = if(skind == content, 1, 0)
+            box { from: gx + 3 + 83 * segk, 65; size: 83, 24; corner: 12; color: mix(mix(bg, ink, 0.13), acc, segk) }
+            zone box sgn { from: gx, 62; size: segw / 2, 30; corner: 15; cursor: pointer; label: "Look for names"; role: tab; selected: skind == name }
+            zone box sgc { from: gx + segw / 2, 62; size: segw / 2, 30; corner: 15; cursor: pointer; label: "Look for what they hold"; role: tab; selected: skind == content }
+            text "Name" { at: gx + 45, 77; anchor: center; size: 12.5; weight: 600; family: "Manrope"; color: mix(ink, dim, segk) }
+            text "Content" { at: gx + 128, 77; anchor: center; size: 12.5; weight: 600; family: "Manrope"; color: mix(dim, on_acc, segk) }
+            on press sgn { emit set_skind(0) }
+            on press sgc { emit set_skind(1) }
+        }
+    }
+    on submit query { emit search_now }
+    prop turn = 0 ~600ms
+    every 600ms while searching { turn: turn + 360 }
+
+    // Tiles, a list, or columns.
+    group {
+        box { from: vx, 58; size: 102, 38; corner: Rs; color: tile.c }
+        box { from: vx, 58; size: 102, 38; corner: Rs; stroke: 1; color: ink; opacity: 9% }
+        prop vk = 0 ~quick
+        follow vk = pick(view, 0, 1, 2)
+        box { from: vx + 4 + 32 * vk, 62; size: 30, 30; corner: Rs - 2; color: ink; opacity: 11% }
+        repeat q in 0..3 {
+            group {
+                zone box vb { from: vx + 4 + 32 * q, 62; size: 30, 30; corner: Rs; cursor: pointer; label: pick(q, "Tiles", "List", "Columns"); role: tab; selected: pick(view, 0, 1, 2) == q }
+                on press vb { emit set_view(q) }
+            }
+        }
+        let gc = mix(dim, ink, 1)
+        repeat q in 0..4 {
+            box { from: vx + 13 + mod(q, 2) * 7, 70 + floor(q / 2) * 7; size: 5, 5; corner: 1.2; color: if(view == grid, ink, dim) }
+        }
+        repeat q in 0..3 {
+            box { from: vx + 44, 70.5 + q * 5; size: 14, 2.2; corner: 1; color: if(view == lines, ink, dim) }
+        }
+        box { from: vx + 76, 69; size: 14, 14; corner: 2.5; stroke: 1.5; color: if(view == columns, ink, dim) }
+        box { from: vx + 80.4, 69; size: 1.4, 14; color: if(view == columns, ink, dim) }
+        box { from: vx + 84.2, 69; size: 1.4, 14; color: if(view == columns, ink, dim) }
+    }
+    // More: what can be done with the folder.
+    group {
+        zone box moreb { from: menub, 58; size: 36, 38; corner: Rs; cursor: pointer; label: "More" }
+        box { from: menub, 58; size: 36, 38; corner: Rs; color: mix(tile.c, ink, 0.05 * moreb.hover) }
+        box { from: menub, 58; size: 36, 38; corner: Rs; stroke: 1; color: ink; opacity: 9% }
+        repeat q in 0..3 {
+            ellipse { at: menub + 11 + q * 7, 77; radius: 1.6; color: dim }
+        }
+        on press moreb { menu.x = menub - 200; menu.y = 100; emit bg_menu }
+    }
+
+    // ═════════════════ the strip under it: how many, and how they are shown ═════════════════
+    event chip ->                        // a chip under the header: its code (the logic says what each one does)
+    component Chip(x: number, w: number, label: text, on: bool, code: number) {
+        group {
+            zone box ch { from: x, 107; size: w, 26; corner: 13; cursor: pointer; label: label; role: toggle; checked: on }
+            on press ch { emit chip(code) }
+            box { from: x, 107; size: w, 26; corner: 13; color: mix(bg, ink, if(on, 0.11, 0.03 + 0.04 * ch.hover)) }
+            box { from: x, 107; size: w, 26; corner: 13; stroke: 1; color: ink; opacity: if(on, 14%, 9%) }
+            text label { at: x + w / 2, 120; anchor: center; size: 12.5; weight: if(on, 600, 500); family: "Manrope"; color: if(on, ink, dim) }
+        }
+    }
+    text count.line { at: mx, 120; anchor: left center; size: 13; family: "Manrope"; color: faint; width: max(mw - 330, 60); lines: 1; markdown: true }
+    let cr = W - 16                      // the chips end here
+    // Walking: the order, the groups (in a list), the hidden ones.
+    group {
+        show: mode == browse and not finding
+        let hx = cr - 88
+        Chip(hx, 88, "Hidden", hidden, 0)
+        group {
+            let ox = hx - 8 - 104
+            Chip(ox, 104, pick(sort, "By name", "By date", "By size", "By kind"), false, 1)
+        }
+        group {
+            show: view == lines and (sort == date or sort == kind)
+            let gx2 = hx - 8 - 104 - 8 - 90
+            Chip(gx2, 90, "Groups", group.on, 2)
+        }
+    }
+    // Names found: of which kind.
+    group {
+        show: finding and mode == browse
+        repeat k in 0..5 {
+            group {
+                let fk = pick(k, 0, 2, 1, 3, 4)
+                Chip(cr - 5 * 96 + k * 96 + 8, 88, pick(k, "All", "PDF", "Pictures", "Documents", "Sound"), pick(filter, 0, 1, 2, 3, 4, 5, 6) == fk, 10 + fk)
+            }
+        }
+    }
+    // What files hold: where, and of which kind.
+    group {
+        show: mode == search
+        group {
+            let ex = cr - 7 * 74 - 8 - 176
+            Chip(ex, 84, "Everywhere", scope == everywhere, 20)
+        }
+        group {
+            let ex2 = cr - 7 * 74 - 8 - 176 + 90
+            Chip(ex2, 84, "Here", scope == here, 21)
+        }
+        repeat k in 0..7 {
+            group {
+                Chip(cr - 7 * 74 + k * 74 + 4, 70, pick(k, "All", "Pictures", "PDF", "Docs", "Sound", "Video", "Code"), pick(filter, 0, 1, 2, 3, 4, 5, 6) == k, 30 + k)
+            }
+        }
+    }
+    box { from: side + 1, hy; size: W - side, 1; color: ink; opacity: 8% }
 
     // ═════════════════ the middle ═════════════════
     // Its width in tiles: the logic lays the folder out in that many.
-    let tile.w = 150
-    let tile.h = if(view == grid, 168, 38)
-    let cols.now = if(view == grid, max(floor((mw + 10) / tile.w), 1), 1)
+    let tile.w = 146
+    let tile.h = if(view == grid and not finding, 178, 38)
+    let cols.now = if(view == grid, max(floor((mw + 12) / tile.w), 1), 1)
     on change cols.now { emit set_cols(cols.now) }
     on change view { emit set_cols(cols.now) }
-    // And once the logic is there: a window that opens at its final width
-    // (a picker, floating at 1280) never changes it, and the logic's guess
-    // of six columns stayed, laying a row out under the look.
+    // How many columns fit, going down a tree.
+    let colw = 214
+    let mcols.now = clamp(floor((mw + 8) / colw), 1, 4)
+    on change mcols.now { emit set_mcols(mcols.now) }
+    // And once the logic is there: a window that opens at its final width (a
+    // picker, floating at 1280) never changes it, and the logic's guess stayed.
     fact ui.ready = false
-    on change ui.ready { emit set_cols(cols.now) }
+    on change ui.ready { emit set_cols(cols.now); emit set_mcols(mcols.now) }
 
     // Dropped from another program onto the empty middle: into this folder.
     zone box midzone { from: mx, my; size: mw, mh; label: "The folder"; role: region }
     on press right midzone { menu.x = pointer.x; menu.y = pointer.y; emit bg_menu }
     on press midzone { emit tile(-1) }
     // The folder's list lies over the middle and takes the presses on its
-    // empty part: there, they are the middle's too —the folder's menu, and
-    // nothing chosen—.
+    // empty part: there, they are the middle's too.
     on press right grid { menu.x = pointer.x; menu.y = pointer.y; emit bg_menu }
     on press grid { emit tile(-1) }
     on drop midzone { drop.x = pointer.x; drop.y = pointer.y; emit dropped(-1) }
-    // Where something landed, a ring goes out, like a stone in water.
-    prop splashed = 1 ~1100ms
-    on change drop.x + drop.y * 7 { splashed: 0 ~0ms; splashed: 1 after 16ms }
-    group {
-        show: splashed < 0.99
-        ellipse { at: drop.x, drop.y; radius: 6 + 70 * splashed; stroke: 2; color: mint; opacity: 70% * (1 - splashed) }
-        ellipse { at: drop.x, drop.y; radius: 4 + 40 * splashed; stroke: 1.5; color: mint; opacity: 45% * (1 - splashed) }
-    }
     prop carry = 0 ~quick
     follow carry = drag.over
-    box { from: mx - 8, my - 6; size: mw + 16, mh + 8; corner: 14; stroke: 2; color: mint; opacity: 50% * carry; show: carry > 0.01 }
+    box { from: mx - 8, my - 6; size: mw + 16, mh + 8; corner: R; stroke: 1.5; color: acc; opacity: 60% * carry; show: carry > 0.01 }
 
-    // ── a folder: tiles, or lines ──
-    // A folder arrives from the depth when you go in, and from above when you come back up.
+    // ── a folder: tiles, or a list (also of the names found) ──
+    let listed = mode == browse and view != columns or finding
+    let lhead = if(view == lines or finding, 32, 0)
+    let wide = mw >= 640
+    // The list's columns: the name, where (names found), when, how big, what.
+    let lc.where = if(finding, max(mw * 0.4, 240), 0)
+    let lc.date = if(finding, mw - 330, mw - 400)
+    let lc.size = if(finding, mw - 14, mw - 120)
+    let lc.kind = mw - 108
+    group {
+        show: listed and lhead > 0
+        text "NAME" { at: mx + 58, my + 10; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        text "WHERE" { at: mx + lc.where, my + 10; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint; show: finding and wide }
+        text pick(sort, "MODIFIED", "MODIFIED  ↓", "MODIFIED", "MODIFIED") { at: mx + lc.date, my + 10; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint; show: wide }
+        text pick(sort, "SIZE", "SIZE", "SIZE  ↓", "SIZE") { at: mx + lc.size, my + 10; anchor: right center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        text pick(sort, "KIND", "KIND", "KIND", "KIND  ↓") { at: mx + lc.kind, my + 10; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint; show: not finding and wide }
+        box { from: mx, my + 24; size: mw, 1; color: ink; opacity: 8% }
+    }
+    // A folder arrives a little from below when you go in, from above when you come back up.
     prop dive = 0 ~calm
     on change nav.gen { dive: nav.dir ~0ms; dive: 0 after 16ms }
     group {
-        show: mode == browse
-        pivot: mx + mw / 2, my + mh / 3
-        scale: 1 - 0.06 * dive
-        opacity: 1 - 0.8 * abs(dive)
-        blur: 7 * abs(dive)
-        clip box { from: mx - 6, my - 4; size: mw + 12, mh + 4; corner: 10 }
+        show: listed
+        move: 0, 10 * dive
+        opacity: 1 - 0.7 * abs(dive)
+        clip box { from: mx - 6, my + lhead; size: mw + 12, mh - lhead + 4 }
         column grid {
-            at: mx, my
-            view: mw, mh
+            at: mx, my + lhead + 2
+            view: mw, mh - lhead - 2
             step: tile.h
-            content: total * tile.h
+            content: total * tile.h + if(finding, 60, 0)
             for r in rows from first {
                 group {
                     size: mw, tile.h
                     move: 0, first * tile.h
+                    // A group's name, in a list.
+                    group {
+                        show: r.ishead
+                        text r.head { at: 12, tile.h / 2 + 4; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+                        box { from: 12, tile.h - 6; size: mw - 24, 1; color: ink; opacity: 6% }
+                    }
                     for c in r.cells {
                         group {
-                            let tx = if(view == grid, mod(c.at, cols) * tile.w, 0)
+                            let lst = view != grid or finding
+                            let tx = if(lst, 0, mod(c.at, cols) * tile.w)
+                            let tw2 = if(lst, mw, tile.w - 12)
+                            let th2 = tile.h - if(lst, 4, 6)
                             prop on = 0 ~quick
                             follow on = if(c.picked, 1, 0)
-                            prop hv = 0 ~quick
                             prop ta = 0 ~calm
                             follow ta = if(c.has.thumb, 1, 0)
                             // The tile: pressed, chosen; twice, opened; carried, to another program.
-                            zone box t { from: tx, 0; size: if(view == grid, tile.w - 10, mw), tile.h - 6; corner: 12; cursor: pointer; carries: "{c.path}"; label: "{c.name}"; role: item; selected: c.picked }
-                            follow hv = t.hover
-                            // Under the pointer it lifts off the bottom a little: a plate of its own, with its shadow.
-                            body {
-                                color: mix(#18211e, #1d2c27, on)
-                                rim: 12%
-                                shadow: 0, 10 * hv, 22 * hv, 40% * hv
-                                opacity: max(hv, on)
-                                box { from: tx, -3 * hv; size: if(view == grid, tile.w - 10, mw), tile.h - 6; corner: 12 }
-                            }
-                            box { from: tx, -3 * hv; size: if(view == grid, tile.w - 10, mw), tile.h - 6; corner: 12; stroke: 1.2; color: mint; opacity: 65% * on }
-                            // Grid: the picture, or the icon, and the name under it.
+                            zone box t { from: tx, 0; size: tw2, th2; corner: R; cursor: pointer; carries: "{c.path}"; label: "{c.name}"; role: item; selected: c.picked }
+                            box { from: tx, 0; size: tw2, th2; corner: if(lst, Rs, R); color: mix(bg, mix(ink, acc, on), 0.04 + 0.04 * t.hover + 0.06 * on); opacity: if(lst, 45% + 55% * max(t.hover, on), max(t.hover, on)) }
+                            box { from: tx, 0; size: tw2, th2; corner: if(lst, Rs, R); stroke: 1; color: acc; opacity: 70% * on }
+                            // Tiles: the picture, the folder or the glyph; the name under it; how big.
                             group {
-                                show: view == grid
+                                show: not lst
                                 opacity: if(c.hidden, 55%, 100%)
-                                move: 0, -3 * hv
-                                // A frame for a picture; an icon stands on its own.
+                                let px = tx + 8
+                                let pw2 = tile.w - 28
+                                // A picture.
                                 group {
-                                    show: c.has.thumb
-                                    body {
-                                        color: #0b0e0d
-                                        rim: 8%
-                                        box { from: tx + 7, 7; size: tile.w - 24, 108; corner: 9 }
+                                    show: c.has.thumb and not c.dir
+                                    box { from: px, 8; size: pw2, 90; corner: Rs; color: tile.c }
+                                    group {
+                                        clip box { from: px, 8; size: pw2, 90; corner: Rs }
+                                        image c.thumb { at: px, 8; size: pw2, 90; fit: cover; opacity: ta }
+                                    }
+                                    group {
+                                        show: c.video
+                                        ellipse { at: px + 16, 84; radius: 9; color: #000000; opacity: 55% }
+                                        path { at: px + 16, 84; color: #ffffff; move -3, -4.5; line 4.5, 0; line -3, 4.5; close }
                                     }
                                 }
-                                image c.thumb { at: tx + 7, 7; size: tile.w - 24, 108; show: c.has.thumb; opacity: ta }
-                                image c.icon { at: tx + (tile.w - 10) / 2 - 32, 27; size: 64, 64; show: not c.has.thumb }
-                                // A video: a little play mark on its picture.
+                                // A folder: its back, its front, and a grain for what it holds.
                                 group {
-                                    show: c.video and c.has.thumb
-                                    ellipse { at: tx + 23, 99; radius: 10; color: #000000; opacity: 55% }
-                                    path { at: tx + 23, 99; color: ink; move -3, -5; line 5, 0; line -3, 5; close }
+                                    show: c.dir
+                                    box { from: px + 6, 16; size: 44, 14; corner: 4; color: mix(bg, ink, 0.1) }
+                                    box { from: px + 6, 22; size: pw2 - 12, 70; corner: Rs; color: mix(bg, ink, 0.1) }
+                                    box { from: px, 30; size: pw2, 68; corner: Rs; color: mix(bg, ink, 0.14) }
+                                    box { from: px, 30; size: pw2, 68; corner: Rs; stroke: 1; color: ink; opacity: 8% }
+                                    shader grains { at: px + pw2 / 2 - 21, 56; size: 42, 6; values: 6, min(c.n, 6), 7, 4.4, gr, 60%, 12%; colors: ink, ink }
+                                    shader grains { at: px + pw2 / 2 - 21, 66; size: 42, 6; values: 6, clamp(c.n - 6, 0, 6), 7, 4.4, gr, 60%, 12%; colors: ink, ink; show: c.n > 6 }
                                 }
-                                text c.name { at: tx + (tile.w - 10) / 2, 124; anchor: center top; width: tile.w - 18; lines: 2; align: center; size: 11.5; weight: 550; color: ink; line_height: 1.2 }
+                                // Anything else: its glyph, and what it is.
+                                group {
+                                    show: not c.has.thumb and not c.dir
+                                    box { from: px, 8; size: pw2, 90; corner: Rs; color: tile.c }
+                                    box { from: px, 8; size: pw2, 90; corner: Rs; stroke: 1; color: ink; opacity: 6% }
+                                    shader glyph { at: px + pw2 / 2 - 17.5, 28; size: 35, 35; values: c.lo, c.hi, 7, 5, gr, 80%, 12%; colors: ink, ink }
+                                    text c.ext { at: px + pw2 / 2, 78; anchor: center; size: 10; family: "JetBrains Mono"; color: faint }
+                                }
+                                column { at: tx + (tile.w - 12) / 2, 108; anchor: center top; gap: 5; align: center
+                                    text c.nm { width: tile.w - 20; lines: 2; align: center; size: 13; weight: 500; family: "Manrope"; color: ink; line_height: 1.2; markdown: true; tight: true }
+                                    text c.size { size: 10.5; family: "JetBrains Mono"; color: faint }
+                                }
+                                // Chosen: a mark in its corner.
+                                group {
+                                    show: on > 0.02
+                                    opacity: on
+                                    box { from: tx + 12, 12; size: 18, 18; corner: 4; color: acc }
+                                    path { at: tx + 21, 21; stroke: 1.8; color: on_acc; move -4, 0; line 2.5, 3.5; line 4.5, -6 }
+                                }
                             }
-                            // Lines: icon, name, date, size.
+                            // A list: its glyph or picture, the name, where, when, how big, what.
                             group {
-                                show: view == lines
+                                show: lst
                                 opacity: if(c.hidden, 55%, 100%)
-                                image c.thumb { at: 10, 4; size: 32, 24; show: c.has.thumb }
-                                image c.icon { at: 14, 4; size: 24, 24; show: not c.has.thumb }
-                                text c.name { at: 54, 16; anchor: left center; width: mw - 360; lines: 1; size: 12.5; weight: 550; color: ink }
-                                text c.date { at: mw - 290, 16; anchor: left center; size: 11.5; color: dim; width: 170; lines: 1 }
-                                text c.size { at: mw - 16, 16; anchor: right center; size: 11.5; color: dim }
+                                box { from: 12, 5; size: 26, 26; corner: Rs - 2; color: mix(bg, ink, 0.09); show: not c.has.thumb }
+                                shader glyph { at: 16, 9; size: 18, 18; values: c.lo, c.hi, 3.6, 2.6, gr, if(c.dir, 70%, 80%), 14%; colors: ink, ink; show: not c.has.thumb }
+                                group {
+                                    show: c.has.thumb
+                                    clip box { from: 12, 5; size: 26, 26; corner: Rs - 2 }
+                                    image c.thumb { at: 12, 5; size: 26, 26; fit: cover }
+                                }
+                                text c.nm { at: 58, 18; anchor: left center; width: if(finding and wide, lc.where - 70, if(wide, lc.date - 70, mw - 200)); lines: 1; size: 13.5; weight: 500; family: "Manrope"; color: ink; markdown: true }
+                                text c.folder { at: lc.where, 18; anchor: left center; width: lc.date - lc.where - 16; lines: 1; size: 11.5; family: "JetBrains Mono"; color: faint; show: finding and wide }
+                                text c.date { at: lc.date, 18; anchor: left center; width: if(finding, 150, 170); lines: 1; size: 12.5; family: "Manrope"; color: dim; show: wide }
+                                group {
+                                    show: not c.dir and not finding
+                                    shader grains { at: lc.size - 132, 15; size: 70, 6; values: 10, c.sz, 7, 4, gr, 75%, 14%; colors: ink, ink; show: wide }
+                                    text c.size { at: lc.size, 18; anchor: right center; size: 11.5; family: "JetBrains Mono"; color: dim }
+                                }
+                                text c.size { at: lc.size, 18; anchor: right center; size: 11.5; family: "JetBrains Mono"; color: dim; show: c.dir or finding }
+                                text c.kname { at: lc.kind, 18; anchor: left center; size: 12.5; family: "Manrope"; color: faint; width: 100; lines: 1; show: not finding and wide }
                             }
                             on press t { emit tile(c.at) }
                             on press right t { menu.x = pointer.x; menu.y = pointer.y; emit tile_menu(c.at) }
@@ -545,378 +890,331 @@ scene Sonda {
         // Another folder starts at its top (and one gone back to, where it was: the logic says it a moment later).
         on change nav.gen { grid.scroll: 0 }
         on change grid.back { grid.scroll: clamp(grid.at, 0, max(grid.content - mh, 0)) }
-        // Only if it is not in sight already, and never past the folder's end:
-        // a folder of four lines does not scroll at all.
+        // Only if it is not in sight already, and never past the folder's end.
         on change grid.go {
-            grid.scroll: clamp(if(grid.to < grid.scroll, grid.to - tile.h, if(grid.to + tile.h > grid.scroll + mh, grid.to + 2 * tile.h - mh, grid.scroll)), 0, max(grid.content - mh, 0)) ~calm
+            grid.scroll: clamp(if(grid.to < grid.scroll, grid.to - tile.h, if(grid.to + tile.h > grid.scroll + mh - lhead, grid.to + 2 * tile.h - mh + lhead, grid.scroll)), 0, max(grid.content - mh + lhead, 0)) ~calm
+        }
+        // Under the names found: what Tab does.
+        let hy2 = my + lhead + 2 + total * tile.h - grid.scroll + 26
+        group {
+            show: finding and fhint.on and hy2 < my + mh - 10
+            repeat k in 0..5 {
+                box { at: mx + 22 + k * 3.6, hy2; size: 2, pick(k, 5, 10, 14, 9, 4); corner: 1; color: acc }
+            }
+            text fhint { at: mx + 44, hy2; anchor: left center; size: 13; family: "Manrope"; color: dim; width: mw - 60; lines: 1; markdown: true }
         }
         // A thin bar where you are in it.
-        box { from: mx + mw + 2, my + grid.scroll / max(grid.content, 1) * mh; size: 3, mh * mh / max(grid.content, mh); corner: 1.5; color: ink; opacity: if(grid.content > mh, 22%, 0) }
-        // Nothing here: an anchor sinks to the bottom, sways, and a few bubbles go up.
-        prop sink = 0 ~lively
-        follow sink = if(count == 0 and not loading, 1, 0)
-        prop sway = 0 ~gentle
-        on change count == 0 and not loading while count == 0 and not loading { impulse sway 160; emit sank }
+        box { from: mx + mw + 4, my + lhead + grid.scroll / max(grid.content, 1) * (mh - lhead); size: 3, (mh - lhead) * (mh - lhead) / max(grid.content, mh - lhead); corner: 1.5; color: ink; opacity: if(grid.content > mh - lhead, 18%, 0) }
+    }
+
+    // Nothing here: a dune of grains, three of them lit.
+    prop sink = 0 ~calm
+    follow sink = if(count == 0 and not loading and mode == browse and not finding and view != columns, 1, 0)
+    group {
+        show: sink > 0.01
+        opacity: sink
+        let ex0 = mx + mw / 2
+        let ey0 = my + mh * 0.42
+        repeat i in 0..40 {
+            group {
+                let hgt = round(2.2 + 1.6 * sin(i * 13 + 20) + 1.1 * sin(i * 31) + 0.9 * sin(i * 7 + 5))
+                repeat j in 0..5 {
+                    box { at: ex0 - 136 + i * 7, ey0 + 18 - j * 7 - 4 * sin(i * 9) + 6 * (1 - sink); size: 4.6, 4.6; corner: 1.3 * gr + 0.4; color: ink; opacity: if(j < hgt, 22%, 0) }
+                }
+            }
+        }
+        box { at: ex0 - 3, ey0 - 22; size: 5, 5; corner: 1.5 * gr + 0.4; color: acc; opacity: 90% }
+        box { at: ex0 - 38, ey0 - 8; size: 5, 5; corner: 1.5 * gr + 0.4; color: acc; opacity: 70% }
+        box { at: ex0 + 26, ey0 - 12; size: 5, 5; corner: 1.5 * gr + 0.4; color: acc; opacity: 80% }
+        text "Nothing here" { at: ex0, ey0 + 52; anchor: center; size: 27; weight: 400; family: "Newsreader"; color: ink }
+        text "Drop here what you want to bring, or paste it with Ctrl+V." { at: ex0, ey0 + 86; anchor: center; size: 13.5; family: "Manrope"; color: dim; show: not in.trash }
         group {
-            show: sink > 0.01
-            opacity: sink
-            figure anchor { at: mx + mw / 2, my + 64 + 40 * sink; size: 64, 80; rotate: sway * 1deg; pivot: 0, -40 }
-            particles { at: mx + mw / 2, my + 140; area: 40, 6; count: 14; life: 1.2s .. 2.4s; speed: 20 .. 60; direction: -90deg; spread: 30deg; gravity: 0, -30; size: 5, 2; colors: mint, mint; opacity: 50%, 0%; shape: dot; burst: sank }
-            text "This folder is empty" { at: mx + mw / 2, my + 170; anchor: center; size: 15; weight: 600; color: dim }
-            text "Drop files here to copy them" { at: mx + mw / 2, my + 196; anchor: center; size: 12; color: faint; show: not in.trash }
+            show: not in.trash and mw >= 520
+            component Kbd(x: number, keys: text, w: number, says: text) {
+                group {
+                    box { from: x, ey0 + 108; size: w, 20; corner: 4; color: tile.c }
+                    box { from: x, ey0 + 108; size: w, 20; corner: 4; stroke: 1; color: ink; opacity: 14% }
+                    text keys { at: x + w / 2, ey0 + 118; anchor: center; size: 11; family: "JetBrains Mono"; color: dim }
+                    text says { at: x + w + 8, ey0 + 118; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint }
+                }
+            }
+            Kbd(ex0 - 236, "Ctrl ⇧ N", 66, "new folder")
+            Kbd(ex0 - 70, "Ctrl L", 52, "write a path")
+            Kbd(ex0 + 98, "Ctrl T", 52, "new tab")
         }
     }
 
-    // ── what was found ──
-    // They come up from the bottom, one after another, the best first.
-    prop sweep = 1 ~1300ms
+    // ── columns: down a tree ──
+    group {
+        show: mode == browse and view == columns and not finding
+        repeat k in 0..4 {
+            group {
+                show: k < mcol.count
+                let cx = mx + k * colw - 8
+                box { from: cx + colw - 1, my - 16; size: 1, mh + 26; color: ink; opacity: 7%; show: k < mcol.count - 1 }
+            }
+        }
+        row mcolrow { at: mx - 8, my - 8; gap: 0
+            for m in mcol {
+                group {
+                    size: colw, mh
+                    clip box { from: 0, 0; size: colw - 6, mh }
+                    column clist { at: 6, 0; view: colw - 14, mh; step: 31
+                        for e in m.ents {
+                            group {
+                                size: colw - 14, 31
+                                zone box ce { from: 0, 0; size: colw - 14, 29; corner: Rs; cursor: pointer; carries: "{e.path}"; label: "{e.name}"; role: item; selected: e.on }
+                                box { from: 0, 0; size: colw - 14, 29; corner: Rs; color: ink; opacity: 10% * e.on + 4% * ce.hover * (1 - e.on) }
+                                shader glyph { at: 10, 7; size: 15, 15; values: e.lo, e.hi, 3, 2.2, gr, if(e.on, 95%, 70%), 0%; colors: if(e.on, acc, ink), ink }
+                                text e.name { at: 34, 14.5; anchor: left center; size: 13; weight: if(e.on, 600, 500); family: "Manrope"; color: if(e.on, ink, dim); width: colw - 74; lines: 1 }
+                                path { at: colw - 30, 14.5; stroke: 1.5; color: faint; show: e.dir; move -2, -4; line 2, 0; line -2, 4 }
+                                on press ce { emit colent(e.col * 1000 + e.at) }
+                                on press right ce { menu.x = pointer.x; menu.y = pointer.y; emit colent_menu(e.col * 1000 + e.at) }
+                                on drop ce { drop.x = pointer.x; drop.y = pointer.y; emit dropped(-1000 - e.col * 1000 - e.at) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── what files hold, found ──
+    // They come up one after another, the best first.
+    prop sweep = 1 ~1100ms
     on change found.gen { sweep: 0 ~0ms; sweep: 1 after 16ms }
     group {
         show: mode == search
-        clip box { from: mx - 6, my - 4; size: mw + 12, mh + 4; corner: 10 }
+        clip box { from: mx - 6, my - 6; size: mw + 12, mh + 8 }
         column found {
             at: mx, my
             view: mw, mh
-            step: 100
-            gap: 6
+            step: 112
+            gap: 8
             for h in hits {
                 group {
-                    size: mw, 96
-                    opacity: clamp(sweep * 18 - min(h.index, 14) * 0.9, 0, 1)
-                    move: 0, 30 * (1 - clamp(sweep * 18 - min(h.index, 14) * 0.9, 0, 1))
-                    blur: 5 * (1 - clamp(sweep * 18 - min(h.index, 14) * 0.9, 0, 1))
+                    size: mw, 104
+                    opacity: clamp(sweep * 16 - min(h.index, 12) * 0.9, 0, 1)
+                    move: 0, 18 * (1 - clamp(sweep * 16 - min(h.index, 12) * 0.9, 0, 1))
                     prop on = 0 ~quick
                     follow on = if(h.picked, 1, 0)
-                    zone box hz { from: 0, 0; size: mw, 96; corner: 14; cursor: pointer; carries: "{h.path}"; label: "{h.name}"; role: item; selected: h.picked }
-                    body {
-                        color: mix(#161b19, #1d2a26, on)
-                        rim: 8% + 6% * on
-                        box { from: 0, 0; size: mw, 96; corner: 14 }
+                    zone box hz { from: 0, 0; size: mw, 104; corner: R; cursor: pointer; carries: "{h.path}"; label: "{h.name}"; role: item; selected: h.picked }
+                    box { from: 0, 0; size: mw, 104; corner: R; color: mix(bg, mix(ink, acc, on), 0.045 + 0.03 * hz.hover + 0.05 * on) }
+                    box { from: 0, 0; size: mw, 104; corner: R; stroke: 1; color: mix(ink, acc, on); opacity: 9% + 60% * on }
+                    // Its picture (the moment, the page), or its glyph.
+                    box { from: 10, 10; size: 92, 84; corner: Rs; color: tile.c }
+                    group {
+                        show: h.has.thumb
+                        clip box { from: 10, 10; size: 92, 84; corner: Rs }
+                        image h.thumb { at: 10, 10; size: 92, 84; fit: cover }
                     }
-                    box { from: 0, 0; size: mw, 96; corner: 14; color: ink; opacity: 3% * hz.hover }
-                    box { from: 0, 0; size: mw, 96; corner: 14; stroke: 1.2; color: mint; opacity: 55% * on }
-                    // Its picture (the moment, the page), or what it is.
-                    body {
-                        color: #0b0e0d
-                        box { from: 10, 10; size: 100, 76; corner: 9 }
-                    }
-                    image h.thumb { at: 10, 10; size: 100, 76; show: h.has.thumb }
-                    image h.icon { at: 40, 28; size: 40, 40; show: not h.has.thumb }
-                    // Name, where in it, and in which folder.
-                    text h.name { at: 126, 22; anchor: left center; width: mw - 250; lines: 1; size: 13.5; weight: 650; color: ink }
-                    text "{h.place}" { at: mw - 16, 22; anchor: right center; size: 11.5; weight: 650; color: mint }
-                    text "{h.folder}  ·  {h.date}" { at: 126, 41; anchor: left center; width: mw - 150; lines: 1; size: 11; color: faint }
+                    shader glyph { at: 38.5, 34.5; size: 35, 35; values: h.lo, h.hi, 7, 5, gr, 75%, 12%; colors: ink, ink; show: not h.has.thumb }
+                    text h.name { at: 116, 22; anchor: left center; width: mw - 230; lines: 1; size: 14; weight: 600; family: "Manrope"; color: ink }
                     // What it says there, the words that matched in bold.
-                    text h.excerpt { at: 126, 54; width: mw - 150; lines: 2; size: 11.5; color: dim; line_height: 1.3; markdown: true }
-                    // How strongly it matched.
-                    box { from: mw - 70, 84; size: 54, 3; corner: 1.5; color: ink; opacity: 8% }
-                    box { from: mw - 70, 84; size: 54 * h.strength, 3; corner: 1.5; color: mint; opacity: 70% }
+                    text h.excerpt { at: 116, 34; width: mw - 200; lines: 2; size: 14; family: "Newsreader"; color: dim; line_height: 1.3; markdown: true }
+                    text "{h.folder}" { at: 116, 84; anchor: left center; width: mw - 220; lines: 1; size: 11; family: "JetBrains Mono"; color: faint }
+                    // Where in it: the page, the moment, the line.
+                    group {
+                        show: h.hasplace
+                        measure hplace
+                        box { at: mw - 16 - hplace.width / 2 - 8, 22; size: hplace.width + 16, 22; corner: 6; color: bg; opacity: 80% }
+                        text h.place { at: mw - 24, 22; anchor: right center; size: 11.5; family: "JetBrains Mono"; color: ink; measure: hplace }
+                    }
+                    // How strongly it matched, in five grains.
+                    shader grains { at: mw - 58, 82; size: 42, 6; values: 5, h.strength * 5, 8.4, 5, gr, 90%, 18%; colors: acc, ink }
                     on press hz { emit hit(h.index) }
                     on press right hz { menu.x = pointer.x; menu.y = pointer.y; emit hit_menu(h.index) }
                 }
             }
         }
         on change found.gen { found.scroll: 0 }
-        box { from: mx + mw + 2, my + found.scroll / max(found.content, 1) * mh; size: 3, mh * mh / max(found.content, mh); corner: 1.5; color: ink; opacity: if(found.content > mh, 22%, 0) }
-        text hits.line { at: mx + mw - 4, top + 22; anchor: right center; size: 11.5; color: faint; show: false }
+        box { from: mx + mw + 4, my + found.scroll / max(found.content, 1) * mh; size: 3, mh * mh / max(found.content, mh); corner: 1.5; color: ink; opacity: if(found.content > mh, 18%, 0) }
         // Nothing found, honestly.
-        prop noecho = 0 ~1600ms
-        follow noecho = if(searched and found.n == 0 and not searching, 1, 0)
         group {
             show: searched and found.n == 0 and not searching
-            ellipse { at: mx + mw / 2, my + 110; radius: 6; color: mint; opacity: 50% }
-            repeat k in 0..3 {
-                ellipse { at: mx + mw / 2, my + 110; radius: 10 + (14 + k * 14) * clamp(noecho * 1.6 - k * 0.25, 0, 1); stroke: 1.5; color: mint; opacity: (40% - k * 10%) * clamp(noecho * 1.6 - k * 0.25, 0, 1) }
+            repeat k in 0..9 {
+                box { at: mx + mw / 2 - 28 + k * 7, my + 110 - pick(k, 2, 5, 9, 14, 17, 14, 9, 5, 2) / 2; size: 2.4, pick(k, 2, 5, 9, 14, 17, 14, 9, 5, 2); corner: 1; color: faint }
             }
-            text "Nothing that sounds like that" { at: mx + mw / 2, my + 164; anchor: center; size: 15; weight: 650; color: dim }
-            text "Try other words, or another kind of file." { at: mx + mw / 2, my + 188; anchor: center; size: 12; color: faint }
+            text "Nothing sounds like that" { at: mx + mw / 2, my + 156; anchor: center; size: 22; family: "Newsreader"; color: ink }
+            text "Try other words, or another kind of file." { at: mx + mw / 2, my + 186; anchor: center; size: 13; family: "Manrope"; color: dim }
         }
-    }
-
-    // ═════════════════ where you are, and the search ═════════════════
-    // Back, forward, up.
-    component NavBtn(k: number, x: number, enabled: bool) {
-        group {
-            zone box b { at: x, 32; size: 32, 32; corner: 9; cursor: pointer; active: enabled; label: pick(k, "Back", "Forward", "Up") }
-            box { at: x, 32; size: 32, 32; corner: 9; color: ink; opacity: 7% * b.hover }
-            group {
-                opacity: if(enabled, 85%, 25%)
-                path { at: x, 32; stroke: 2; color: ink; show: k == 0; move 4, -6; line -2, 0; line 4, 6 }
-                path { at: x, 32; stroke: 2; color: ink; show: k == 1; move -4, -6; line 2, 0; line -4, 6 }
-                path { at: x, 32; stroke: 2; color: ink; show: k == 2; move -6, 3; line 0, -3; line 6, 3 }
-            }
-            on press b { emit nav(k) }
-        }
-    }
-    NavBtn(0, side + 30, can.back)
-    NavBtn(1, side + 64, can.forward)
-    NavBtn(2, side + 98, can.up)
-
-    // The crumbs: each a place to go back to. A press beside them (or
-    // Ctrl+L) turns them into the whole path, to write another.
-    group {
-        show: W - side - 120 - sw - 30 >= 60 and not addr.on
-        zone box crumbbg { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36; corner: 8; cursor: text; label: "Location" }
-        box { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36; corner: 8; color: ink; opacity: 4% * crumbbg.hover }
-        on press crumbbg { emit addr_open }
-        clip box { from: side + 120, 14; size: max(W - side - 120 - sw - 30, 40), 36 }
-        row crumbrow { at: side + 124, 32; anchor: left middle; gap: 0
-            for c in crumbs {
-                row cb { padding: 6; corner: 8; gap: 8; cursor: pointer
-                    text c.name { size: 13; weight: 560; color: if(c.at == crumbs.count - 1, ink, dim) }
-                    text "›" { size: 13; color: faint; show: c.at < crumbs.count - 1 }
-                    on press cb { emit crumb(c.at) }
-                    on drop cb { emit dropped(-200 - c.at) }
-                }
-            }
-        }
-    }
-
-    // The location bar: from the crumbs to the right edge, over the search
-    // while it is written in. Enter goes, Tab finishes a folder's name, Esc
-    // or a press elsewhere leaves it.
-    group {
-        show: addr.on
-        body {
-            color: #1b2421
-            rim: 22%
-            border: 1, mix(#26302c, mint, 0.6)
-            box { from: side + 120, 12; size: W - side - 138, 40; corner: 20 }
-        }
-        input location { at: side + 138, 32 - 8.45; width: W - side - 180; size: 13; color: ink; placeholder: "A folder: ~/Documents, /mnt/disk…"; label: "Location" }
-    }
-    on submit location { emit addr_go }
-
-    // The search: describe it, in your own words.
-    prop sf = 0 ~quick
-    follow sf = if(mode == search, 1, 0)
-    // Never over back, forward and up: narrow, it gives up width first.
-    let sw = clamp(min((W - side) * 0.42, W - side - 150), 150, 440)
-    let sx0 = W - sw - 18
-    group {
-        show: not addr.on
-        body {
-            color: mix(#161b19, #1b2421, sf)
-            rim: 12% + 10% * sf
-            border: 1, mix(#26302c, mint, sf * 0.6)
-            box { from: sx0, 12; size: sw, 40; corner: 20 }
-        }
-        // A sounder for a magnifying glass.
-        ellipse { at: sx0 + 22, 32; radius: 3; color: mint }
-        arc { at: sx0 + 22, 32; radius: 8; width: 1.8; span: 100deg; rotate: 90deg; color: mint; opacity: 80% }
-        arc { at: sx0 + 22, 32; radius: 8; width: 1.8; span: 100deg; rotate: -90deg; color: mint; opacity: 40% }
-        input query { at: sx0 + 40, 32 - 9.1; width: sw - 84; size: 14; color: ink; placeholder: "Describe what you are looking for…"; label: "Search" }
-        // Searching: a little ring turning.
-        arc { at: sx0 + sw - 24, 32; radius: 7; width: 2; span: 240deg; rotate: turn * 1deg; color: mint; show: searching }
-        zone box clearq { at: sx0 + sw - 24, 32; size: 26, 26; corner: 13; cursor: pointer; active: mode == search and not searching; label: "Clear the search" }
-        group {
-            show: mode == search and not searching
-            opacity: 60% + 40% * clearq.hover
-            path { at: sx0 + sw - 24, 32; stroke: 1.8; color: ink; move -5, -5; line 5, 5 }
-            path { at: sx0 + sw - 24, 32; stroke: 1.8; color: ink; move 5, -5; line -5, 5 }
-        }
-        on press clearq { emit clear_search }
-    }
-    on submit query { emit search_now }
-    prop turn = 0 ~600ms
-    every 600ms while searching { turn: turn + 360 }
-
-    // ═════════════════ the strip under it: filters, or the folder's tools ═════════════════
-    // Searching: what kind, and where.
-    group {
-        show: mode == search
-        group {
-        // Up to the button beside them (narrow, the small one: it moves left
-        // when the look is off).
-        clip box { from: mx - 2, top + 4; size: if(mw >= 760, mw - 230, max(W - pane - 74 - 44 * (1 - pv) - mx, 40)), 36 }
-        row { at: mx, top + 8; gap: 6
-            repeat k in 0..7 {
-                row fc { padding: 6; corner: 14; cursor: pointer; fill: if(filter == k, #284238, #1c2220)
-                    text pick(k, "All", "Pictures", "PDF", "Documents", "Sound", "Video", "Code") { size: 12; weight: 620; color: if(filter == k, ink, dim) }
-                    on press fc { emit set_filter(k) }
-                }
-            }
-        }
-        }
-        // Everywhere, or only under this folder (in a narrow window, a folder
-        // that lights up).
-        group {
-            show: mw >= 760
-            zone box scopebtn { from: W - pane - 238, top + 8; size: 210, 28; corner: 14; cursor: pointer; label: "Where to search"; role: toggle; checked: scope == here }
-            box { from: W - pane - 238, top + 8; size: 210, 28; corner: 14; color: ink; opacity: 6% + 5% * scopebtn.hover }
-            box { from: W - pane - 238 + 3 + 102 * (scope == here), top + 11; size: 102, 22; corner: 11; color: mint; opacity: 22% }
-            text "Everywhere" { at: W - pane - 238 + 54, top + 22; anchor: center; size: 11.5; weight: 650; color: if(scope == everywhere, ink, dim) }
-            text "In this folder" { at: W - pane - 238 + 156, top + 22; anchor: center; size: 11.5; weight: 650; color: if(scope == here, ink, dim) }
-            on press scopebtn { emit set_scope(if(scope == here, 0, 1)) }
-        }
-        group {
-            show: mw < 760
-            zone box scopemini { from: W - pane - 66 - 44 * (1 - pv), top + 8; size: 40, 28; corner: 14; cursor: pointer; label: "In this folder"; role: toggle; checked: scope == here }
-            box { from: W - pane - 66 - 44 * (1 - pv), top + 8; size: 40, 28; corner: 14; color: if(scope == here, mint, ink); opacity: if(scope == here, 24%, 6% + 5% * scopemini.hover) }
-            box { from: W - pane - 55 - 44 * (1 - pv), top + 15; size: 18, 13; corner: 2.5; stroke: 1.5; color: if(scope == here, ink, dim) }
-            box { from: W - pane - 55 - 44 * (1 - pv), top + 13; size: 8, 4; corner: 1.5; color: if(scope == here, ink, dim) }
-            on press scopemini { emit set_scope(if(scope == here, 0, 1)) }
-        }
-    }
-    // Walking: how many, and how they are shown.
-    group {
-        show: mode == browse
-        // Narrow, what does not fit goes, from the left: the count, the order,
-        // the hidden ones (Ctrl+H still shows them).
-        text count.line { at: mx + 4, top + 22; anchor: left center; size: 12; color: dim; width: max(mw - 360, 40); lines: 1; show: mw - 360 >= 60 }
-        // Order.
-        group {
-            show: mw >= 330
-            let ox = W - pane - 340
-            zone box sortbtn { from: ox, top + 8; size: 120, 28; corner: 14; cursor: pointer; label: "Order"; value: sort }
-            box { from: ox, top + 8; size: 120, 28; corner: 14; color: ink; opacity: 6% + 5% * sortbtn.hover }
-            text pick(sort, "By name", "By date", "By size", "By kind") { at: ox + 60, top + 22; anchor: center; size: 11.5; weight: 600; color: dim }
-            on press sortbtn { emit set_sort }
-        }
-        // Hidden ones.
-        group {
-            show: mw >= 220
-            let hx = W - pane - 212
-            zone box hidbtn { from: hx, top + 8; size: 92, 28; corner: 14; cursor: pointer; label: "Hidden files"; role: toggle; checked: hidden }
-            box { from: hx, top + 8; size: 92, 28; corner: 14; color: if(hidden, mint, ink); opacity: if(hidden, 20%, 6% + 5% * hidbtn.hover) }
-            text "Hidden" { at: hx + 46, top + 22; anchor: center; size: 11.5; weight: 600; color: if(hidden, ink, dim) }
-            on press hidbtn { emit toggle_hidden }
-        }
-        // Grid or lines.
-        group {
-            let vx = W - pane - 112
-            zone box vbtn { from: vx, top + 8; size: 64, 28; corner: 14; cursor: pointer; label: "Grid or list"; value: view }
-            box { from: vx, top + 8; size: 64, 28; corner: 14; color: ink; opacity: 6% + 5% * vbtn.hover }
-            box { from: vx + 3 + 29 * (view == lines), top + 11; size: 29, 22; corner: 11; color: mint; opacity: 22% }
-            repeat q in 0..4 {
-                box { from: vx + 11 + mod(q, 2) * 6, top + 16 + floor(q / 2) * 6; size: 4.5, 4.5; corner: 1; color: if(view == grid, ink, dim) }
-            }
-            repeat q in 0..3 {
-                box { from: vx + 39, top + 16 + q * 4.5; size: 12, 2.2; corner: 1; color: if(view == lines, ink, dim) }
-            }
-            on press vbtn { emit set_view(if(view == grid, 1, 0)) }
-        }
-    }
-    // The look, on and off (it fits from 1000 px).
-    group {
-        show: W >= 1000
-        zone box pvbtn { from: W - 46, top + 8; size: 30, 28; corner: 10; cursor: pointer; label: "Preview"; role: toggle; checked: preview.on }
-        box { from: W - 46, top + 8; size: 30, 28; corner: 10; color: if(preview.on, mint, ink); opacity: if(preview.on, 20%, 6% + 5% * pvbtn.hover) }
-        box { from: W - 39, top + 14; size: 16, 16; corner: 3; stroke: 1.5; color: if(preview.on, ink, dim) }
-        box { from: W - 30, top + 14; size: 1.5, 16; color: if(preview.on, ink, dim) }
-        on press pvbtn { emit toggle_preview }
     }
 
     // ═════════════════ the look ═════════════════
     group {
         show: pv > 0.02
         opacity: pv
-        let px0 = W - pane - 6
-        let pw = pane.full - 10
-        body {
-            // Drawn glass too, like the folders.
-            color: #101a17
-            opacity: 82%
-            glass: 36%
-            rim: 12%
-            light: 8%, 0, 140
-            border: 1, #3a5b53
-            shadow: 0, 12, 34, 35%
-            box { from: px0, my - 46; size: pw, H - my + 32; corner: 18 }
-        }
+        let px0 = W - pane
+        let pw = pane.full - 36
+        let x0 = px0 + 18
+        box { from: px0, hy + 1; size: pane.full, H - hy - 1; color: pane.c }
+        box { from: px0, hy + 1; size: 1, H - hy - 1; color: ink; opacity: 8% }
         group {
             show: look.has
-            // The picture: the photo, the page, the moment, the first page.
-            body {
-                color: #0a0d0c
-                box { from: px0 + 14, my - 32; size: pw - 28, 220; corner: 10 }
+            text look.label { at: x0, hy + 24; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint; width: pw; lines: 1 }
+            // The picture: the photo, the page, the moment; or what it says; or its glyph.
+            let ph = if(look.image or look.text or (playing and win.0.open), 170, 120)
+            box { from: x0, hy + 40; size: pw, ph; corner: R; color: tile.c }
+            box { from: x0, hy + 40; size: pw, ph; corner: R; stroke: 1; color: ink; opacity: 7% }
+            group {
+                show: look.image and not (playing and win.0.open)
+                clip box { from: x0, hy + 40; size: pw, ph; corner: R }
+                image look.pic { at: x0, hy + 40; size: pw, ph; fit: cover }
             }
-            image look.pic { at: px0 + 14, my - 32; size: pw - 28, 220; show: look.image and not (playing and win.0.open) }
             // The player, where the picture was.
-            window win.0 { at: px0 + 14, my - 32; size: pw - 28, 220; ask: pw - 28, 220; show: playing and win.0.open }
+            window win.0 { at: x0, hy + 40; size: pw, ph; ask: pw, ph; show: playing and win.0.open }
             group {
                 show: playing and win.0.open
-                zone box stopbtn { at: px0 + pw - 34, my - 12; size: 26, 26; corner: 13; cursor: pointer; label: "Stop" }
-                ellipse { at: px0 + pw - 34, my - 12; radius: 13; color: #000000; opacity: 60% + 20% * stopbtn.hover }
-                box { at: px0 + pw - 34, my - 12; size: 9, 9; corner: 1.5; color: ink }
+                zone box stopbtn { at: x0 + pw - 18, hy + 58; size: 26, 26; corner: 13; cursor: pointer; label: "Stop" }
+                ellipse { at: x0 + pw - 18, hy + 58; radius: 13; color: #000000; opacity: 60% + 20% * stopbtn.hover }
+                box { at: x0 + pw - 18, hy + 58; size: 9, 9; corner: 1.5; color: #ffffff }
                 on press stopbtn { emit stop_player }
             }
-            group {
-                show: not look.image and not (playing and win.0.open)
-                ellipse { at: px0 + pw / 2, my + 78; radius: 30; color: mint; opacity: 12% }
-                text look.kindname { at: px0 + pw / 2, my + 78; anchor: center; size: 12; weight: 700; color: mint }
-            }
-            text look.name { at: px0 + 16, my + 206; width: pw - 32; lines: 2; size: 15; weight: 700; color: ink; selectable: true }
-            text look.place { at: px0 + 16, my + 248; size: 12.5; weight: 700; color: mint; show: look.loc }
-            text look.meta { at: px0 + 16, my + if(look.loc, 268, 250); width: pw - 32; lines: 2; size: 11.5; color: dim; line_height: 1.35 }
-            text look.folder { at: px0 + 16, my + if(look.loc, 304, 286); width: pw - 32; lines: 1; size: 11; color: faint }
             // What it says: the stretch where it was found, the words in bold.
             group {
-                show: look.text
-                let ty = my + if(look.loc, 326, 308)
-                box { from: px0 + 14, ty; size: pw - 28, max(H - ty - 72, 40); corner: 10; color: #0c100f }
-                group {
-                    clip box { from: px0 + 14, ty; size: pw - 28, max(H - ty - 72, 40); corner: 10 }
-                    column lookscroll { at: px0 + 24, ty + 10; view: pw - 48, max(H - ty - 92, 20)
-                        text look.body { width: pw - 52; size: 11.5; color: #c9d2ce; line_height: 1.4; markdown: true; selectable: true; show: not look.code }
-                        text look.body { width: pw - 52; size: 11; color: #c9d2ce; line_height: 1.35; markdown: true; selectable: true; family: "monospace"; show: look.code }
+                show: look.text and not look.image
+                clip box { from: x0, hy + 40; size: pw, ph; corner: R }
+                column lookscroll { at: x0 + 12, hy + 52; view: pw - 24, ph - 20
+                    text look.body { width: pw - 28; size: 12.5; family: "Newsreader"; color: dim; line_height: 1.35; markdown: true; selectable: true; show: not look.code }
+                    text look.body { width: pw - 28; size: 11; family: "JetBrains Mono"; color: dim; line_height: 1.45; markdown: true; selectable: true; show: look.code }
+                }
+            }
+            shader glyph { at: x0 + pw / 2 - 30, hy + 40 + ph / 2 - 30; size: 60, 60; values: look.lo, look.hi, 12, 8.5, gr, 80%, 12%; colors: ink, ink; show: not look.image and not look.text and not (playing and win.0.open) }
+            measure lname
+            text look.name { at: x0, hy + ph + 62; width: pw; lines: 2; size: 22; weight: 400; family: "Newsreader"; color: ink; selectable: true; line_height: 1.15; measure: lname }
+            let ky = hy + ph + 62 + lname.height + 14
+            text look.place { at: x0, ky + 2; anchor: left center; size: 12.5; weight: 600; family: "Manrope"; color: acc; show: look.loc }
+            column lookrows { at: x0, ky + if(look.loc, 18, 0); gap: 0
+                for kv in lookkv {
+                    group {
+                        size: pw, 26
+                        text kv.k { at: 0, 13; anchor: left center; size: 12.5; family: "Manrope"; color: faint }
+                        text kv.v { at: pw, 13; anchor: right center; size: 12.5; family: "Manrope"; color: ink; width: pw - 90; lines: 1; align: right; show: not kv.mono }
+                        text kv.v { at: pw, 13; anchor: right center; size: 11.5; family: "JetBrains Mono"; color: ink; width: pw - 90; lines: 1; align: right; show: kv.mono }
                     }
                 }
             }
             // What can be done with it.
-            component LookBtn(k: number, x: number, w: number, name: text, primary: bool) {
+            let by = H - 52 - pickbar
+            zone box lmain { from: x0, by; size: pw - 92, 36; corner: Rs; cursor: pointer; label: pick(if(look.loc or look.media, look.action + 1, 0), "Open", "Open at line", "Open at page", "Play here") }
+            box { from: x0, by; size: pw - 92, 36; corner: Rs; color: acc; opacity: 88% + 12% * lmain.hover }
+            text pick(if(look.loc or look.media, look.action + 1, 0), "Open", "Open at line", "Open at page", "Play here") { at: x0 + (pw - 92) / 2, by + 18; anchor: center; size: 13.5; weight: 650; family: "Manrope"; color: on_acc }
+            on press lmain { emit look_act(if(look.loc or look.media, 1, 0)) }
+            component LookIcon(k: number, x: number, name: text) {
                 group {
-                    zone box lb { from: x, H - 58; size: w, 34; corner: 11; cursor: pointer; label: name }
-                    box { from: x, H - 58; size: w, 34; corner: 11; color: if(primary, mint, ink); opacity: if(primary, 85% + 15% * lb.hover, 7% + 6% * lb.hover) }
-                    text name { at: x + w / 2, H - 41; anchor: center; size: 12; weight: 700; color: if(primary, #0b100e, ink) }
-                    on press lb { emit look_act(k) }
+                    zone box li { from: x, by; size: 38, 36; corner: Rs; cursor: pointer; label: name }
+                    box { from: x, by; size: 38, 36; corner: Rs; color: mix(tile.c, ink, 0.05 * li.hover) }
+                    box { from: x, by; size: 38, 36; corner: Rs; stroke: 1; color: ink; opacity: 10% }
+                    on press li { menu.x = x - 200; menu.y = by - 10; emit look_act(k) }
                 }
             }
-            LookBtn(1, px0 + 14, 150, pick(look.action, "Open at line", "Open at page", "Play here"), true) { show: look.loc or look.media }
-            LookBtn(0, px0 + 14, 150, "Open", true) { show: not look.loc and not look.media }
-            LookBtn(2, px0 + 170, 70, "Folder", false)
-            LookBtn(3, px0 + 246, 70, "Copy path", false)
+            LookIcon(2, x0 + pw - 84, "Show in its folder")
+            box { from: x0 + pw - 74, by + 12; size: 18, 13; corner: 2.5; stroke: 1.5; color: dim }
+            box { from: x0 + pw - 74, by + 10; size: 8, 4; corner: 1.5; color: dim }
+            LookIcon(4, x0 + pw - 38, "More")
+            repeat q in 0..3 {
+                ellipse { at: x0 + pw - 26 + q * 7, by + 18; radius: 1.6; color: dim }
+            }
         }
         group {
             show: not look.has
-            text "Choose something to see it here" { at: px0 + pw / 2, my + 90; anchor: center; size: 12.5; color: faint }
+            text "Choose something to see it here" { at: x0 + pw / 2, hy + 120; anchor: center; size: 13; family: "Manrope"; color: faint }
         }
     }
+
+    // ═════════════════ islands: what is chosen, and the long jobs ═════════════════
+    // Several chosen: how many, how much, and what to do with them.
+    prop selp = 0 ~calm
+    follow selp = if(chosen.count >= 2 and mode == browse and not pick.on, 1, 0)
+    let iw = min(mw - 20, 700)
+    let ix = mx + mw / 2 - iw / 2
+    let iy = H - 62 - pickbar
+    group {
+        show: selp > 0.01
+        opacity: selp
+        move: 0, 14 * (1 - selp)
+        box { from: ix, iy; size: iw, 48; corner: 24; color: bruma; opacity: 96% }
+        box { from: ix, iy; size: iw, 48; corner: 24; stroke: 1; color: ink; opacity: 11% }
+        measure seln
+        text "{chosen.count, 0}" { at: ix + 22, iy + 24; anchor: left center; size: 22; family: "Newsreader"; color: ink; measure: seln }
+        text "chosen" { at: ix + 30 + seln.width, iy + 25; anchor: left center; size: 13.5; weight: 600; family: "Manrope"; color: ink }
+        text sel.size { at: ix + 96 + seln.width, iy + 25; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; show: iw >= 560 }
+        component IslBtn(k: number, x: number, w: number, name: text, danger: bool) {
+            group {
+                zone box ib { from: x, iy + 7; size: w, 34; corner: 17; cursor: pointer; label: name }
+                box { from: x, iy + 7; size: w, 34; corner: 17; color: if(danger, coral, ink); opacity: 9% * ib.hover }
+                text name { at: x + w / 2, iy + 24; anchor: center; size: 13; weight: 550; family: "Manrope"; color: if(danger, mix(ink, coral, 0.5), ink) }
+                on press ib { emit act(k) }
+            }
+        }
+        let bx0 = ix + iw - 46 - 4 * 100 - 96
+        IslBtn(3, bx0, 92, "Copy", false)
+        IslBtn(4, bx0 + 96, 92, "Cut", false)
+        IslBtn(13, bx0 + 192, 108, "Compress", false) { show: iw >= 560 }
+        box { from: bx0 + 306, iy + 14; size: 1, 20; color: ink; opacity: 12% }
+        IslBtn(9, bx0 + 314, 104, "Trash", true)
+        zone box selx { at: ix + iw - 26, iy + 24; size: 32, 32; corner: 16; cursor: pointer; label: "Choose none" }
+        ellipse { at: ix + iw - 26, iy + 24; radius: 15; color: ink; opacity: 8% + 8% * selx.hover }
+        path { at: ix + iw - 26, iy + 24; stroke: 1.6; color: dim; move -4, -4; line 4, 4 }
+        path { at: ix + iw - 26, iy + 24; stroke: 1.6; color: dim; move 4, -4; line -4, 4 }
+        on press selx { emit sel_clear }
+    }
+    // Copies, moves, packing: an islet each, over the chosen ones' island, stoppable.
+    group {
+        show: jobs.count > 0
+        let jw = min(mw - 20, 420)
+        column joblist { at: mx + mw / 2 - jw / 2, iy - 54 * selp - (jobs.count - 1) * 54; gap: 6
+            for j in jobs {
+                group {
+                    size: jw, 48
+                    box { from: 0, 0; size: jw, 48; corner: 24; color: bruma; opacity: 96% }
+                    box { from: 0, 0; size: jw, 48; corner: 24; stroke: 1; color: ink; opacity: 11% }
+                    arc { at: 26, 24; radius: 9; width: 2; span: 260deg; rotate: turn2 * 1deg; color: acc }
+                    text j.title { at: 48, 17; anchor: left center; size: 13; weight: 600; family: "Manrope"; color: ink; width: jw - 160; lines: 1 }
+                    shader grains { at: 48, 30; size: jw - 170, 6; values: floor((jw - 170) / 6.4), j.frac * floor((jw - 170) / 6.4), 6.4, 4, gr, 85%, 18%; colors: acc, ink }
+                    text j.line { at: jw - 56, 24; anchor: right center; size: 11; family: "JetBrains Mono"; color: faint; width: 96; lines: 1; align: right }
+                    zone box jstop { at: jw - 26, 24; size: 32, 32; corner: 16; cursor: pointer; label: "Stop {j.title}" }
+                    ellipse { at: jw - 26, 24; radius: 15; color: coral; opacity: 6% + 16% * jstop.hover }
+                    path { at: jw - 26, 24; stroke: 1.6; color: mix(dim, coral, jstop.hover); move -4, -4; line 4, 4 }
+                    path { at: jw - 26, 24; stroke: 1.6; color: mix(dim, coral, jstop.hover); move 4, -4; line -4, 4 }
+                    on press jstop { emit job_cancel(j.id) }
+                }
+            }
+        }
+    }
+    prop turn2 = 0 ~900ms
+    every 900ms while jobs.count > 0 { turn2: turn2 + 360 }
+    // A job done: its grains go up and fade.
+    on change jobs.splash { emit splash }
+    particles { at: mx + mw / 2, iy + 20; area: 200, 10; count: 26; life: 0.8s .. 1.6s; speed: 30 .. 90; direction: -90deg; spread: 30deg; gravity: 0, -30; drag: 0.6; size: 4, 4; colors: acc, ink; opacity: 70%, 0%; shape: square; burst: splash }
 
     // ═════════════════ the menu ═════════════════
     zone box away { from: 0, 0; size: W, H; active: menu.open; label: "Close the menu" }
     on press away { menu.open = false }
     on press right away { menu.open = false }
-    // Drawn in the window, over everything, kept inside it.
     prop menup = 0 ~quick
     follow menup = if(menu.open, 1, 0)
-    let mx0 = min(menu.x, W - 240)
-    let my0 = min(menu.y, H - 20 - menucol.height)
+    let mx0 = clamp(menu.x, 8, W - 248)
+    let my0 = clamp(menu.y, 8, H - 24 - menucol.height)
     group {
         show: menup > 0.01
         opacity: menup
         pivot: mx0, my0
-        scale: 0.94 + 0.06 * menup
+        scale: 0.96 + 0.04 * menup
         move: mx0, my0 - 6 * (1 - menup)
-        body {
-            color: #1b201e
-            rim: 14%
-            border: 1, #2b3330
-            shadow: 0, 14, 34, 45%
-            box { from: 0, 0; size: 230, 16 + menucol.height; corner: 12 }
-        }
+        box { from: 0, 0; size: 240, 16 + menucol.height; corner: R; color: bruma }
+        box { from: 0, 0; size: 240, 16 + menucol.height; corner: R; stroke: 1; color: ink; opacity: 12% }
         column menucol { at: 8, 8; gap: 0
-            // What it holds is the logic's: what can be done with what was chosen, here.
             for m in menu {
                 group {
-                    size: 214, if(m.sep, 38, 32)
+                    size: 224, if(m.sep, 38, 32)
                     let my1 = if(m.sep, 6, 0)
-                    box { from: 4, 0; size: 206, 1; color: ink; opacity: if(m.sep, 8%, 0) }
-                    zone box mi { from: 0, my1; size: 214, 32; corner: 8; cursor: pointer; label: "{m.label}"; active: not m.danger }
-                    zone box mz { from: 0, my1; size: 214, 32; corner: 8; cursor: pointer; label: "{m.label}"; active: m.danger; agent: no }
-                    box { from: 0, my1; size: 214, 32; corner: 8; color: if(m.danger, #ef7a66, mint); opacity: 14% * max(mi.hover, mz.hover) }
-                    text m.label { at: 12, my1 + 16; anchor: left center; size: 12.5; weight: 550; color: if(m.danger, #f29a8a, ink) }
-                    text m.keys { at: 202, my1 + 16; anchor: right center; size: 11; color: faint }
+                    box { from: 6, 0; size: 212, 1; color: ink; opacity: if(m.sep, 9%, 0) }
+                    zone box mi { from: 0, my1; size: 224, 32; corner: Rs; cursor: pointer; label: "{m.label}"; active: not m.danger }
+                    zone box mz { from: 0, my1; size: 224, 32; corner: Rs; cursor: pointer; label: "{m.label}"; active: m.danger; agent: no }
+                    box { from: 0, my1; size: 224, 32; corner: Rs; color: if(m.danger, coral, ink); opacity: 9% * max(mi.hover, mz.hover) }
+                    text m.label { at: 12, my1 + 16; anchor: left center; size: 13; weight: 500; family: "Manrope"; color: if(m.danger, mix(ink, coral, 0.55), ink) }
+                    text m.keys { at: 212, my1 + 16; anchor: right center; size: 10.5; family: "JetBrains Mono"; color: faint }
                     on press mi { menu.open = false; emit act(m.k) }
                     on press mz { menu.open = false; emit act(m.k) }
                 }
@@ -924,337 +1222,220 @@ scene Sonda {
         }
     }
 
-    // ═════════════════ asking for a name ═════════════════
+    // ═════════════════ dialogs ═════════════════
+    // A card of mist over a veil, its title in the serif; the buttons as everywhere.
+    component Veil(p: number) {
+        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% * p }
+    }
+    component Card(x: number, y: number, w: number, h: number) {
+        group {
+            box { from: x, y; size: w, h; corner: R + 4; color: bruma }
+            box { from: x, y; size: w, h; corner: R + 4; stroke: 1; color: ink; opacity: 12% }
+        }
+    }
+    event dlg ->                         // a dialog's button: its code (the logic says what each one does)
+    component Btn(x: number, y: number, w: number, name: text, primary: bool, code: number) {
+        group {
+            zone box bb { from: x, y; size: w, 36; corner: Rs; cursor: pointer; label: name }
+            on press bb { emit dlg(code) }
+            box { from: x, y; size: w, 36; corner: Rs; color: if(primary, acc, ink); opacity: if(primary, 88% + 12% * bb.hover, 7% + 6% * bb.hover) }
+            box { from: x, y; size: w, 36; corner: Rs; stroke: 1; color: ink; opacity: if(primary, 0, 10%) }
+            text name { at: x + w / 2, y + 18; anchor: center; size: 13; weight: 650; family: "Manrope"; color: if(primary, on_acc, ink) }
+        }
+    }
+
+    // ── asking for a name ──
     prop askp = 0 ~calm
     follow askp = if(ask.open, 1, 0)
     group {
         show: askp > 0.01
         opacity: askp
         pivot: W / 2, H / 2
-        // Narrower than it, it is made smaller to fit, its zones with it.
-        scale: (0.96 + 0.04 * askp) * min(1, (W - 24) / 440)
-        blur: 6 * (1 - askp)
+        scale: (0.97 + 0.03 * askp) * min(1, (W - 24) / 440)
         zone box veil { from: 0, 0; size: W, H; label: "Cancel" }
-        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% }
+        Veil(1)
         on press veil { emit ask_cancel }
         let ax = W / 2 - 220
-        let ay = H / 2 - 90 + 12 * (1 - askp)
-        body {
-            color: #1b201e
-            rim: 14%
-            shadow: 0, 20, 50, 50%
-            box { from: ax, ay; size: 440, 160; corner: 18 }
-        }
-        text ask.title { at: ax + 24, ay + 34; anchor: left center; size: 15; weight: 700; color: ink }
-        box { from: ax + 24, ay + 58; size: 392, 40; corner: 10; color: #0c100f }
-        box { from: ax + 24, ay + 58; size: 392, 40; corner: 10; stroke: 1; color: mint; opacity: 50% }
-        input answer { at: ax + 38, ay + 78 - 9.1; width: 364; size: 14; color: ink; label: "The name" }
-        zone box ok { from: ax + 316, ay + 110; size: 100, 34; corner: 11; cursor: pointer; label: "Accept" }
-        box { from: ax + 316, ay + 110; size: 100, 34; corner: 11; color: mint; opacity: 85% + 15% * ok.hover }
-        text "OK" { at: ax + 366, ay + 127; anchor: center; size: 12.5; weight: 750; color: #0b100e }
-        zone box cancel { from: ax + 206, ay + 110; size: 100, 34; corner: 11; cursor: pointer; label: "Cancel" }
-        box { from: ax + 206, ay + 110; size: 100, 34; corner: 11; color: ink; opacity: 7% + 6% * cancel.hover }
-        text "Cancel" { at: ax + 256, ay + 127; anchor: center; size: 12.5; weight: 650; color: ink }
-        on press ok { emit answered }
-        on press cancel { emit ask_cancel }
+        let ay = H / 2 - 90 + 10 * (1 - askp)
+        Card(ax, ay, 440, 172)
+        text ask.title { at: ax + 24, ay + 36; anchor: left center; size: 21; family: "Newsreader"; color: ink }
+        box { from: ax + 24, ay + 62; size: 392, 40; corner: Rs; color: bg }
+        box { from: ax + 24, ay + 62; size: 392, 40; corner: Rs; stroke: 1; color: acc; opacity: 55% }
+        input answer { at: ax + 38, ay + 82 - 9.1; width: 364; size: 14; family: "Manrope"; color: ink; label: "The name" }
+        Btn(ax + 206, ay + 118, 100, "Cancel", false, 1)
+        Btn(ax + 316, ay + 118, 100, "OK", true, 2)
     }
     on submit answer { emit answered }
 
-    // ═════════════════ which folders it reads ═════════════════
+    // ── which folders it reads ──
     prop setp = 0 ~calm
     follow setp = if(settings.open, 1, 0)
     group {
         show: setp > 0.01
         opacity: setp
         pivot: W / 2, H / 2
-        // Narrower than it, it is made smaller to fit, its zones with it.
-        scale: (0.96 + 0.04 * setp) * min(1, (W - 24) / 580)
-        blur: 6 * (1 - setp)
+        scale: (0.97 + 0.03 * setp) * min(1, (W - 24) / 580)
         zone box setveil { from: 0, 0; size: W, H; label: "Close" }
-        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% }
+        Veil(1)
         on press setveil { settings.open = false }
-        let gx = W / 2 - 290
-        let gy = max(H / 2 - 300, 20) + 12 * (1 - setp)
-        let gh = 150 + readf.count * 34 + codef.count * 34 + 120
-        body {
-            color: #1b201e
-            rim: 14%
-            shadow: 0, 20, 50, 50%
-            box { from: gx, gy; size: 580, gh; corner: 18 }
+        let sgx = W / 2 - 290
+        let gy = max(H / 2 - 300, 20) + 10 * (1 - setp)
+        let gh = 156 + readf.count * 34 + codef.count * 34 + 124
+        Card(sgx, gy, 580, gh)
+        zone box setcard { from: sgx, gy; size: 580, gh; corner: R; label: "Folders" }
+        text "What Sonda reads" { at: sgx + 26, gy + 36; anchor: left center; size: 23; family: "Newsreader"; color: ink }
+        text "It reads them in the background and keeps up with what changes. Code is only searched with code:" { at: sgx + 26, gy + 62; anchor: left center; size: 12; family: "Manrope"; color: dim; width: 530; lines: 1 }
+        text "BY WHAT THEY HOLD" { at: sgx + 26, gy + 96; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        component FolderRow(nm: text, pth: text, lab: text) {
+            group {
+                size: 540, 32
+                box { from: 0, 0; size: 540, 32; corner: Rs; color: ink; opacity: 5% }
+                text nm { at: 12, 16; anchor: left center; size: 13; weight: 600; family: "Manrope"; color: ink; width: 160; lines: 1 }
+                text pth { at: 180, 16; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 310; lines: 1 }
+                zone box rmf { from: 508, 4; size: 24, 24; corner: 12; cursor: pointer; label: lab }
+                box { from: 508, 4; size: 24, 24; corner: 12; color: coral; opacity: 22% * rmf.hover }
+                path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move -4, -4; line 4, 4 }
+                path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move 4, -4; line -4, 4 }
+            }
         }
-        zone box setcard { from: gx, gy; size: 580, gh; corner: 18; label: "Folders" }
-        text "What Sonda reads" { at: gx + 26, gy + 32; anchor: left center; size: 16; weight: 750; color: ink }
-        text "It reads them in the background and keeps up with what changes. Code is only searched with code:" { at: gx + 26, gy + 56; anchor: left center; size: 11.5; color: dim; width: 530; lines: 1 }
-        text "By what they hold" { at: gx + 26, gy + 92; anchor: left center; size: 12; weight: 700; color: mint }
-        column { at: gx + 20, gy + 106; gap: 2
+        column { at: sgx + 20, gy + 110; gap: 2
             for f in readf {
                 group {
                     size: 540, 32
-                    box { from: 0, 0; size: 540, 32; corner: 8; color: ink; opacity: 4% }
-                    text f.name { at: 12, 16; anchor: left center; size: 12.5; weight: 600; color: ink; width: 160; lines: 1 }
-                    text f.path { at: 180, 16; anchor: left center; size: 11; color: faint; width: 310; lines: 1 }
+                    box { from: 0, 0; size: 540, 32; corner: Rs; color: ink; opacity: 5% }
+                    text f.name { at: 12, 16; anchor: left center; size: 13; weight: 600; family: "Manrope"; color: ink; width: 160; lines: 1 }
+                    text f.path { at: 180, 16; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 310; lines: 1 }
                     zone box rmf { from: 508, 4; size: 24, 24; corner: 12; cursor: pointer; label: "Stop reading {f.name}" }
-                    box { from: 508, 4; size: 24, 24; corner: 12; color: #ef7a66; opacity: 22% * rmf.hover }
-                    path { at: 520, 16; stroke: 1.6; color: mix(dim, #f29a8a, rmf.hover); move -4, -4; line 4, 4 }
-                    path { at: 520, 16; stroke: 1.6; color: mix(dim, #f29a8a, rmf.hover); move 4, -4; line -4, 4 }
+                    box { from: 508, 4; size: 24, 24; corner: 12; color: coral; opacity: 22% * rmf.hover }
+                    path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move -4, -4; line 4, 4 }
+                    path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move 4, -4; line -4, 4 }
                     on press rmf { emit settings_act(100 + f.index) }
                 }
             }
         }
-        let cy2 = gy + 112 + readf.count * 34 + 10
-        text "As code" { at: gx + 26, cy2 + 12; anchor: left center; size: 12; weight: 700; color: mint }
-        column { at: gx + 20, cy2 + 26; gap: 2
+        let cy2 = gy + 116 + readf.count * 34 + 10
+        text "AS CODE" { at: sgx + 26, cy2 + 12; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        column { at: sgx + 20, cy2 + 26; gap: 2
             for f in codef {
                 group {
                     size: 540, 32
-                    box { from: 0, 0; size: 540, 32; corner: 8; color: ink; opacity: 4% }
-                    text f.name { at: 12, 16; anchor: left center; size: 12.5; weight: 600; color: ink; width: 160; lines: 1 }
-                    text f.path { at: 180, 16; anchor: left center; size: 11; color: faint; width: 310; lines: 1 }
-                    zone box rmc { from: 508, 4; size: 24, 24; corner: 12; cursor: pointer; label: "Stop reading {f.name} as code" }
-                    box { from: 508, 4; size: 24, 24; corner: 12; color: #ef7a66; opacity: 22% * rmc.hover }
-                    path { at: 520, 16; stroke: 1.6; color: mix(dim, #f29a8a, rmc.hover); move -4, -4; line 4, 4 }
-                    path { at: 520, 16; stroke: 1.6; color: mix(dim, #f29a8a, rmc.hover); move 4, -4; line -4, 4 }
-                    on press rmc { emit settings_act(200 + f.index) }
+                    box { from: 0, 0; size: 540, 32; corner: Rs; color: ink; opacity: 5% }
+                    text f.name { at: 12, 16; anchor: left center; size: 13; weight: 600; family: "Manrope"; color: ink; width: 160; lines: 1 }
+                    text f.path { at: 180, 16; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 310; lines: 1 }
+                    zone box rmf { from: 508, 4; size: 24, 24; corner: 12; cursor: pointer; label: "Stop reading {f.name} as code" }
+                    box { from: 508, 4; size: 24, 24; corner: 12; color: coral; opacity: 22% * rmf.hover }
+                    path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move -4, -4; line 4, 4 }
+                    path { at: 520, 16; stroke: 1.5; color: mix(dim, coral, rmf.hover); move 4, -4; line -4, 4 }
+                    on press rmf { emit settings_act(200 + f.index) }
                 }
             }
         }
-        // Add the folder shown, one way or the other; and close.
-        let by = gy + gh - 54
-        zone box addf { from: gx + 20, by; size: 190, 34; corner: 11; cursor: pointer; active: not here.read; label: "Read this folder" }
-        box { from: gx + 20, by; size: 190, 34; corner: 11; color: mint; opacity: if(here.read, 25%, 85% + 15% * addf.hover) }
-        text "+ This folder" { at: gx + 115, by + 17; anchor: center; size: 12; weight: 700; color: #0b100e }
-        zone box addc { from: gx + 220, by; size: 190, 34; corner: 11; cursor: pointer; active: not here.read; label: "Read this folder as code" }
-        box { from: gx + 220, by; size: 190, 34; corner: 11; color: ink; opacity: if(here.read, 4%, 7% + 6% * addc.hover) }
-        text "+ This folder as code" { at: gx + 315, by + 17; anchor: center; size: 12; weight: 650; color: if(here.read, faint, ink) }
-        zone box setdone { from: gx + 466, by; size: 94, 34; corner: 11; cursor: pointer; label: "Done" }
-        box { from: gx + 466, by; size: 94, 34; corner: 11; color: ink; opacity: 7% + 6% * setdone.hover }
-        text "Done" { at: gx + 513, by + 17; anchor: center; size: 12.5; weight: 700; color: ink }
-        on press addf { emit settings_act(0) }
-        on press addc { emit settings_act(1) }
-        on press setdone { settings.open = false }
+        let by2 = gy + gh - 56
+        Btn(sgx + 20, by2, 180, "+ This folder", true, 10) { show: not here.read }
+        Btn(sgx + 210, by2, 200, "+ This folder as code", false, 11) { show: not here.read }
+        Btn(sgx + 466, by2, 94, "Done", false, 12)
     }
     on key Escape while settings.open { settings.open = false }
 
-    // ═════════════════ how far the long jobs are ═════════════════
-    // Copies, moves, packing: a card each, bottom right of the middle, stoppable.
-    group {
-        show: jobs.count > 0
-        let jx = mx + mw - min(mw, 340)
-        let jw = min(mw, 340)
-        column joblist { at: jx, H - 14 - pickbar - jobs.count * 70; gap: 6
-            for j in jobs {
-                group {
-                    size: jw, 64
-                    body {
-                        color: #161c1a
-                        rim: 14%
-                        shadow: 0, 10, 26, 40%
-                        box { from: 0, 0; size: jw, 64; corner: 14 }
-                    }
-                    prop jw2 = 0 ~quick
-                    follow jw2 = j.frac
-                    shader fill { at: 0, 0; size: jw, 64; corner: 14; values: jw2; colors: mint, #2f7d68 }
-                    text j.title { at: 16, 18; anchor: left center; size: 12.5; weight: 650; color: ink; width: jw - 64; lines: 1 }
-                    text j.line { at: 16, 38; anchor: left center; size: 11; color: dim; width: jw - 64; lines: 1 }
-                    box { from: 16, 50; size: jw - 64, 4; corner: 2; color: ink; opacity: 8% }
-                    prop jf = 0 ~quick
-                    follow jf = j.frac
-                    box { from: 16, 50; size: max((jw - 64) * jf, 4), 4; corner: 2; color: mint; opacity: 90% }
-                    zone box jstop { at: jw - 26, 32; size: 28, 28; corner: 14; cursor: pointer; label: "Stop {j.title}" }
-                    ellipse { at: jw - 26, 32; radius: 14; color: #ef7a66; opacity: 6% + 18% * jstop.hover }
-                    path { at: jw - 26, 32; stroke: 1.8; color: mix(dim, #f29a8a, jstop.hover); move -4.5, -4.5; line 4.5, 4.5 }
-                    path { at: jw - 26, 32; stroke: 1.8; color: mix(dim, #f29a8a, jstop.hover); move 4.5, -4.5; line -4.5, 4.5 }
-                    on press jstop { emit job_cancel(j.id) }
-                }
-            }
-        }
-    }
-
-    on change jobs.splash { emit splash }
-    particles { at: mx + mw - min(mw, 340) / 2, H - 30 - pickbar; area: min(mw, 340) - 40, 10; count: 40; life: 0.9s .. 1.8s; speed: 30 .. 110; direction: -90deg; spread: 40deg; gravity: 0, -40; drag: 0.6; size: 5, 2; colors: mint, #d8fff0; opacity: 70%, 0%; shape: dot; burst: splash }
-
-    // ═════════════════ picking for another program ═════════════════
-    // Its «Open» or «Save»: what would be given (or the name to save with), the
-    // program's filters, and the answer.
-    group {
-        show: pick.on
-        let pby = H - 14 - 56
-        let bw = mw + 12
-        let bx = mx - 6
-        body {
-            color: #171d1b
-            rim: 14%
-            border: 1, #2b3632
-            box { from: bx, pby; size: bw, 56; corner: 14 }
-        }
-        let aw = 140
-        let fw = if(pick.filters > 1, 180, 0)
-        let lw = bw - aw - 110 - fw - 40
-        text pick.title { at: bx + 16, pby + 15; anchor: left center; size: 10.5; weight: 650; color: mint; width: lw; lines: 1 }
-        group {
-            show: pick.mode != save
-            text pick.what { at: bx + 16, pby + 36; anchor: left center; size: 13; weight: 600; color: ink; width: lw; lines: 1 }
-        }
-        group {
-            show: pick.mode == save
-            box { from: bx + 12, pby + 24; size: lw, 26; corner: 8; color: #0c100f }
-            box { from: bx + 12, pby + 24; size: lw, 26; corner: 8; stroke: 1; color: mint; opacity: 40% }
-            input pickname { at: bx + 22, pby + 37 - 8.45; width: lw - 20; size: 13; color: ink; placeholder: "File name"; label: "File name" }
-        }
-        group {
-            show: pick.filters > 1
-            let fx = bx + bw - aw - 110 - fw - 12
-            zone box pfbtn { from: fx, pby + 12; size: fw - 8, 32; corner: 10; cursor: pointer; label: "Kind of file"; value: "{pick.filter}" }
-            box { from: fx, pby + 12; size: fw - 8, 32; corner: 10; color: ink; opacity: 6% + 6% * pfbtn.hover }
-            text pick.filter { at: fx + 12, pby + 28; anchor: left center; size: 11.5; weight: 600; color: dim; width: fw - 46; lines: 1 }
-            path { at: fx + fw - 24, pby + 28; stroke: 1.6; color: dim; move -4, -2; line 0, 2; line 4, -2 }
-            on press pfbtn { emit pick_filter }
-        }
-        zone box pcancel { from: bx + bw - aw - 106, pby + 12; size: 96, 32; corner: 10; cursor: pointer; label: "Cancel" }
-        box { from: bx + bw - aw - 106, pby + 12; size: 96, 32; corner: 10; color: ink; opacity: 7% + 6% * pcancel.hover }
-        text "Cancel" { at: bx + bw - aw - 58, pby + 28; anchor: center; size: 12.5; weight: 650; color: ink }
-        zone box paccept { from: bx + bw - aw - 4, pby + 12; size: aw - 8, 32; corner: 10; cursor: pointer; active: pick.ok; label: "{pick.accept}" }
-        box { from: bx + bw - aw - 4, pby + 12; size: aw - 8, 32; corner: 10; color: mint; opacity: if(pick.ok, 85% + 15% * paccept.hover, 25%) }
-        text pick.accept { at: bx + bw - aw / 2 - 8, pby + 28; anchor: center; size: 12.5; weight: 750; color: #0b100e; width: aw - 20; lines: 1; align: center }
-        on press pcancel { emit pick_cancel }
-        on press paccept { emit pick_accept }
-    }
-    on submit pickname { emit pick_accept }
-
-    // ═════════════════ a name taken ═════════════════
+    // ── a name taken ──
     prop cfp = 0 ~calm
     follow cfp = if(cf.open, 1, 0)
     group {
         show: cfp > 0.01
         opacity: cfp
         pivot: W / 2, H / 2
-        // Narrower than it, it is made smaller to fit, its zones with it.
-        scale: (0.96 + 0.04 * cfp) * min(1, (W - 24) / 500)
-        blur: 6 * (1 - cfp)
+        scale: (0.97 + 0.03 * cfp) * min(1, (W - 24) / 520)
         zone box cfveil { from: 0, 0; size: W, H; label: "Cancel" }
-        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% }
+        Veil(1)
         on press cfveil { emit resolve(3) }
-        let cfx = W / 2 - 250
-        let cfy = H / 2 - 100 + 12 * (1 - cfp)
-        body {
-            color: #1b201e
-            rim: 14%
-            shadow: 0, 20, 50, 50%
-            box { from: cfx, cfy; size: 500, 190; corner: 18 }
-        }
-        zone box cfcard { from: cfx, cfy; size: 500, 190; corner: 18; label: "{cf.title}"; role: region }
-        text cf.title { at: cfx + 26, cfy + 36; anchor: left center; size: 15; weight: 700; color: ink; width: 450; lines: 1 }
-        text cf.names { at: cfx + 26, cfy + 62; width: 450; lines: 2; size: 12; color: dim; line_height: 1.35 }
-        text "What is there goes to the trash if you replace it: Ctrl+Z brings it back." { at: cfx + 26, cfy + 112; anchor: left center; size: 11; color: faint; width: 450; lines: 1 }
-        component CfBtn(k: number, x: number, w: number, name: text, primary: bool) {
-            group {
-                zone box cb { from: x, cfy + 136; size: w, 36; corner: 11; cursor: pointer; label: name }
-                box { from: x, cfy + 136; size: w, 36; corner: 11; color: if(primary, mint, ink); opacity: if(primary, 85% + 15% * cb.hover, 7% + 6% * cb.hover) }
-                text name { at: x + w / 2, cfy + 154; anchor: center; size: 12.5; weight: 700; color: if(primary, #0b100e, ink) }
-                on press cb { emit resolve(k) }
-            }
-        }
-        CfBtn(3, cfx + 20, 96, "Cancel", false)
-        CfBtn(1, cfx + 122, 96, "Skip", false) { show: cf.many and not cf.save }
-        CfBtn(2, cfx + 224, 128, "Keep both", false) { show: not cf.save }
-        CfBtn(0, cfx + 358, 122, "Replace", true)
+        let cfx = W / 2 - 260
+        let cfy = H / 2 - 104 + 10 * (1 - cfp)
+        Card(cfx, cfy, 520, 200)
+        zone box cfcard { from: cfx, cfy; size: 520, 200; corner: R; label: "{cf.title}"; role: region }
+        text cf.title { at: cfx + 26, cfy + 38; anchor: left center; size: 20; family: "Newsreader"; color: ink; width: 470; lines: 1 }
+        text cf.names { at: cfx + 26, cfy + 64; width: 470; lines: 2; size: 12.5; family: "Manrope"; color: dim; line_height: 1.35 }
+        text "What is there goes to the trash if you replace it: Ctrl+Z brings it back." { at: cfx + 26, cfy + 116; anchor: left center; size: 11.5; family: "Manrope"; color: faint; width: 470; lines: 1 }
+        Btn(cfx + 20, cfy + 144, 96, "Cancel", false, 23)
+        Btn(cfx + 124, cfy + 144, 96, "Skip", false, 21) { show: cf.many and not cf.save }
+        Btn(cfx + 228, cfy + 144, 132, "Keep both", false, 22) { show: not cf.save }
+        Btn(cfx + 368, cfy + 144, 132, "Replace", true, 20)
     }
     on key Escape while cf.open { emit resolve(3) }
 
-    // ═════════════════ open with ═════════════════
+    // ── open with ──
     prop owp = 0 ~calm
     follow owp = if(ow.open, 1, 0)
     group {
         show: owp > 0.01
         opacity: owp
         pivot: W / 2, H / 2
-        // Narrower than it, it is made smaller to fit, its zones with it.
-        scale: (0.96 + 0.04 * owp) * min(1, (W - 24) / 540)
-        blur: 6 * (1 - owp)
+        scale: (0.97 + 0.03 * owp) * min(1, (W - 24) / 540)
         zone box owveil { from: 0, 0; size: W, H; label: "Cancel" }
-        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% }
+        Veil(1)
         on press owveil { emit ow_cancel }
         let oh = min(H - 60, 580)
         let owx = W / 2 - 270
-        let oy = H / 2 - oh / 2 + 12 * (1 - owp)
-        body {
-            color: #1b201e
-            rim: 14%
-            shadow: 0, 20, 50, 50%
-            box { from: owx, oy; size: 540, oh; corner: 18 }
-        }
-        zone box owcard { from: owx, oy; size: 540, oh; corner: 18; label: "{ow.title}"; role: region }
-        text ow.title { at: owx + 26, oy + 34; anchor: left center; size: 15; weight: 700; color: ink; width: 490; lines: 1 }
-        text ow.kind { at: owx + 26, oy + 56; anchor: left center; size: 11; color: faint; width: 490; lines: 1 }
+        let oy = H / 2 - oh / 2 + 10 * (1 - owp)
+        Card(owx, oy, 540, oh)
+        zone box owcard { from: owx, oy; size: 540, oh; corner: R; label: "{ow.title}"; role: region }
+        text ow.title { at: owx + 26, oy + 36; anchor: left center; size: 20; family: "Newsreader"; color: ink; width: 490; lines: 1 }
+        text ow.kind { at: owx + 26, oy + 60; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 490; lines: 1 }
         group {
-            clip box { from: owx + 14, oy + 74; size: 512, oh - 74 - 110; corner: 10 }
-            column owlist { at: owx + 14, oy + 74; view: 512, oh - 74 - 110; gap: 2
+            clip box { from: owx + 14, oy + 78; size: 512, oh - 78 - 110; corner: Rs }
+            column owlist { at: owx + 14, oy + 78; view: 512, oh - 78 - 110; gap: 2
                 for a in apps {
                     group {
                         size: 512, if(a.head, 66, 40)
                         let ay0 = if(a.head, 26, 0)
-                        text "Other programs" { at: 12, 14; anchor: left center; size: 10.5; weight: 700; color: faint; show: a.head }
-                        zone box ar { from: 0, ay0; size: 512, 40; corner: 10; cursor: pointer; label: "{a.name}"; role: item; selected: ow.pick == a.index }
-                        box { from: 0, ay0; size: 512, 40; corner: 10; color: mint; opacity: if(ow.pick == a.index, 18%, 6% * ar.hover) }
-                        box { from: 0, ay0; size: 512, 40; corner: 10; stroke: 1.2; color: mint; opacity: if(ow.pick == a.index, 55%, 0) }
+                        text "OTHER PROGRAMS" { at: 12, 14; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint; show: a.head }
+                        zone box ar { from: 0, ay0; size: 512, 40; corner: Rs; cursor: pointer; label: "{a.name}"; role: item; selected: ow.pick == a.index }
+                        box { from: 0, ay0; size: 512, 40; corner: Rs; color: ink; opacity: if(ow.pick == a.index, 10%, 5% * ar.hover) }
+                        box { from: 0, ay0; size: 512, 40; corner: Rs; stroke: 1; color: acc; opacity: if(ow.pick == a.index, 60%, 0) }
                         image a.icon { at: 12, ay0 + 6; size: 28, 28; opacity: if(a.rec, 100%, 75%) }
-                        text a.name { at: 52, ay0 + 20; anchor: left center; size: 13; weight: 560; color: if(a.rec, ink, dim); width: 360; lines: 1 }
-                        text "Now" { at: 498, ay0 + 20; anchor: right center; size: 11; weight: 650; color: mint; show: a.def }
+                        text a.name { at: 52, ay0 + 20; anchor: left center; size: 13.5; weight: 500; family: "Manrope"; color: if(a.rec, ink, dim); width: 360; lines: 1 }
+                        text "NOW" { at: 498, ay0 + 20; anchor: right center; size: 10.5; family: "JetBrains Mono"; color: acc; show: a.def }
                         on press ar { emit ow_pick(a.index) }
                     }
                 }
             }
         }
         let ob = oy + oh - 96
-        zone box owalways { from: owx + 20, ob; size: 400, 30; corner: 8; cursor: pointer; label: "Always use it for this kind of file"; role: toggle; checked: ow.always }
-        box { from: owx + 26, ob + 7; size: 16, 16; corner: 4; stroke: 1.5; color: if(ow.always, mint, dim) }
-        box { from: owx + 29, ob + 10; size: 10, 10; corner: 2.5; color: mint; opacity: if(ow.always, 100%, 0) }
-        text "Always use it for this kind of file" { at: owx + 52, ob + 15; anchor: left center; size: 12; color: if(ow.always, ink, dim) }
+        zone box owalways { from: owx + 20, ob; size: 400, 30; corner: Rs; cursor: pointer; label: "Always use it for this kind of file"; role: toggle; checked: ow.always }
+        box { from: owx + 26, ob + 7; size: 16, 16; corner: 4; stroke: 1.5; color: if(ow.always, acc, dim) }
+        box { from: owx + 29, ob + 10; size: 10, 10; corner: 2.5; color: acc; opacity: if(ow.always, 100%, 0) }
+        text "Always use it for this kind of file" { at: owx + 52, ob + 15; anchor: left center; size: 12.5; family: "Manrope"; color: if(ow.always, ink, dim) }
         on press owalways { toggle ow.always }
-        zone box owcancel { from: owx + 300, oy + oh - 54; size: 104, 36; corner: 11; cursor: pointer; label: "Cancel" }
-        box { from: owx + 300, oy + oh - 54; size: 104, 36; corner: 11; color: ink; opacity: 7% + 6% * owcancel.hover }
-        text "Cancel" { at: owx + 352, oy + oh - 36; anchor: center; size: 12.5; weight: 650; color: ink }
-        zone box owgo { from: owx + 414, oy + oh - 54; size: 106, 36; corner: 11; cursor: pointer; active: ow.pick >= 0; label: "Open" }
-        box { from: owx + 414, oy + oh - 54; size: 106, 36; corner: 11; color: mint; opacity: if(ow.pick >= 0, 85% + 15% * owgo.hover, 25%) }
-        text "Open" { at: owx + 467, oy + oh - 36; anchor: center; size: 12.5; weight: 750; color: #0b100e }
-        on press owcancel { emit ow_cancel }
-        on press owgo { emit ow_go }
+        Btn(owx + 300, oy + oh - 54, 104, "Cancel", false, 30)
+        Btn(owx + 414, oy + oh - 54, 106, "Open", true, 31)
     }
     on key Escape while ow.open { emit ow_cancel }
     on key Return while ow.open { emit ow_go }
 
-    // ═════════════════ properties ═════════════════
+    // ── properties ──
     prop prp = 0 ~calm
     follow prp = if(pr.open, 1, 0)
     group {
         show: prp > 0.01
         opacity: prp
         pivot: W / 2, H / 2
-        // Narrower than it, it is made smaller to fit, its zones with it.
-        scale: (0.96 + 0.04 * prp) * min(1, (W - 24) / 540, (H - 24) / 512)
-        blur: 6 * (1 - prp)
+        scale: (0.97 + 0.03 * prp) * min(1, min((W - 24) / 540, (H - 24) / 520))
         zone box prveil { from: 0, 0; size: W, H; label: "Close" }
-        box { from: -W, -H; size: 3 * W, 3 * H; color: #000000; opacity: 45% }
+        Veil(1)
         on press prveil { emit pr_close }
-        let qh = 512
+        let qh = 520
         let qx = W / 2 - 270
-        let qy = max(H / 2 - qh / 2, 12) + 12 * (1 - prp)
-        body {
-            color: #1b201e
-            rim: 14%
-            shadow: 0, 20, 50, 50%
-            box { from: qx, qy; size: 540, qh; corner: 18 }
-        }
-        zone box prcard { from: qx, qy; size: 540, qh; corner: 18; label: "{pr.name}"; role: region }
+        let qy = max(H / 2 - qh / 2, 12) + 10 * (1 - prp)
+        Card(qx, qy, 540, qh)
+        zone box prcard { from: qx, qy; size: 540, qh; corner: R; label: "{pr.name}"; role: region }
         for i in pricon {
-            image i.icon { at: qx + 24, qy + 22; size: 56, 56 }
+            image i.icon { at: qx + 24, qy + 24; size: 56, 56 }
         }
-        text pr.name { at: qx + 96, qy + 40; anchor: left center; size: 16; weight: 700; color: ink; width: 420; lines: 1; selectable: true }
-        text pr.kind { at: qx + 96, qy + 63; anchor: left center; size: 11.5; color: dim; width: 420; lines: 1 }
+        text pr.name { at: qx + 96, qy + 42; anchor: left center; size: 22; family: "Newsreader"; color: ink; width: 420; lines: 1; selectable: true }
+        text pr.kind { at: qx + 96, qy + 68; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 420; lines: 1 }
         component PrRow(k: number, name: text, value: text) {
             group {
-                text name { at: qx + 26, qy + 108 + k * 26; anchor: left center; size: 11.5; weight: 650; color: faint }
-                text value { at: qx + 150, qy + 108 + k * 26; anchor: left center; size: 12; color: ink; width: 366; lines: 1; selectable: true }
+                text name { at: qx + 26, qy + 112 + k * 26; anchor: left center; size: 12.5; family: "Manrope"; color: faint }
+                text value { at: qx + 150, qy + 112 + k * 26; anchor: left center; size: 12.5; family: "Manrope"; color: ink; width: 366; lines: 1; selectable: true }
             }
         }
         PrRow(0, pick(pr.dir, "Size", "Holds"), "{pr.size}")
@@ -1265,70 +1446,113 @@ scene Sonda {
         PrRow(5, "Owner", "{pr.owner}")
         PrRow(6, "Points to", "{pr.linkto}") { show: pr.link }
         // Who may read, write and run it.
-        let py = qy + 108 + 7 * 26 + 8
-        text "Permissions" { at: qx + 26, py; anchor: left center; size: 11.5; weight: 650; color: faint }
-        text "Read" { at: qx + 236, py; anchor: center; size: 11; color: dim }
-        text "Write" { at: qx + 316, py; anchor: center; size: 11; color: dim }
-        text pick(pr.dir, "Run", "Go in") { at: qx + 396, py; anchor: center; size: 11; color: dim }
+        let py = qy + 112 + 7 * 26 + 8
+        text "PERMISSIONS" { at: qx + 26, py; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        text "Read" { at: qx + 236, py; anchor: center; size: 11.5; family: "Manrope"; color: dim }
+        text "Write" { at: qx + 316, py; anchor: center; size: 11.5; family: "Manrope"; color: dim }
+        text pick(pr.dir, "Run", "Go in") { at: qx + 396, py; anchor: center; size: 11.5; family: "Manrope"; color: dim }
         repeat w in 0..3 {
             group {
-                text pick(w, "You", "Group", "Everyone") { at: qx + 150, py + 28 + w * 30; anchor: left center; size: 12; color: ink }
+                text pick(w, "You", "Group", "Everyone") { at: qx + 150, py + 28 + w * 30; anchor: left center; size: 12.5; family: "Manrope"; color: ink }
                 repeat b in 0..3 {
                     group {
                         let bit = 8 - w * 3 - b
                         let on = mod(floor(pr.mode / pow(2, bit)), 2)
                         zone box pb { at: qx + 236 + b * 80, py + 28 + w * 30; size: 26, 22; corner: 6; cursor: pointer; active: pr.mine; label: pick(w * 3 + b, "You can read", "You can write", "You can run", "The group can read", "The group can write", "The group can run", "Everyone can read", "Everyone can write", "Everyone can run"); role: toggle; checked: on > 0.5 }
-                        box { at: qx + 236 + b * 80, py + 28 + w * 30; size: 18, 18; corner: 5; stroke: 1.5; color: if(on > 0.5, mint, dim); opacity: if(pr.mine, 100%, 45%) }
-                        box { at: qx + 236 + b * 80, py + 28 + w * 30; size: 10, 10; corner: 2.5; color: mint; opacity: if(on > 0.5, if(pr.mine, 100%, 45%), 0) }
+                        box { at: qx + 236 + b * 80, py + 28 + w * 30; size: 18, 18; corner: 5; stroke: 1.5; color: if(on > 0.5, acc, dim); opacity: if(pr.mine, 100%, 45%) }
+                        box { at: qx + 236 + b * 80, py + 28 + w * 30; size: 10, 10; corner: 2.5; color: acc; opacity: if(on > 0.5, if(pr.mine, 100%, 45%), 0) }
                         on press pb { emit pr_bit(bit) }
                     }
                 }
             }
         }
-        // The disk it is on.
-        let dy2 = py + 28 + 3 * 30 + 4
-        text "Disk" { at: qx + 26, dy2; anchor: left center; size: 11.5; weight: 650; color: faint }
-        box { from: qx + 150, dy2 - 3; size: 250, 6; corner: 3; color: ink; opacity: 8% }
-        box { from: qx + 150, dy2 - 3; size: max(250 * pr.used, 6), 6; corner: 3; color: if(pr.used > 0.9, #ef7a66, mint); opacity: 85% }
-        text pr.free { at: qx + 412, dy2; anchor: left center; size: 11.5; color: dim; width: 110; lines: 1 }
-        zone box prdone { from: qx + 420, qy + qh - 54; size: 100, 36; corner: 11; cursor: pointer; label: "Close" }
-        box { from: qx + 420, qy + qh - 54; size: 100, 36; corner: 11; color: ink; opacity: 7% + 6% * prdone.hover }
-        text "Close" { at: qx + 470, qy + qh - 36; anchor: center; size: 12.5; weight: 700; color: ink }
-        on press prdone { emit pr_close }
+        // The disk it is on, in grains.
+        let dy2 = py + 28 + 3 * 30 + 6
+        text "DISK" { at: qx + 26, dy2; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: faint }
+        shader grains { at: qx + 150, dy2 - 4; size: 250, 8; values: 36, pr.used * 36, 7, 4.4, gr, 85%, 18%; colors: if(pr.used > 0.9, coral, acc), ink }
+        text pr.free { at: qx + 412, dy2; anchor: left center; size: 11.5; family: "JetBrains Mono"; color: dim; width: 110; lines: 1 }
+        Btn(qx + 420, qy + qh - 54, 100, "Close", false, 40)
     }
     on key Escape while pr.open { emit pr_close }
+
+    // ═════════════════ picking for another program ═════════════════
+    // Its «Open» or «Save»: what would be given (or the name to save with), the
+    // program's filters, and the answer.
+    group {
+        show: pick.on
+        let pby = H - 12 - 56
+        let bw = mw + 12
+        let bx = mx - 6
+        box { from: bx, pby; size: bw, 56; corner: R; color: bruma }
+        box { from: bx, pby; size: bw, 56; corner: R; stroke: 1; color: ink; opacity: 12% }
+        let aw = 140
+        let fw = if(pick.filters > 1, 180, 0)
+        let lw = bw - aw - 110 - fw - 40
+        text pick.title { at: bx + 16, pby + 15; anchor: left center; size: 10.5; family: "JetBrains Mono"; color: acc; width: lw; lines: 1 }
+        group {
+            show: pick.mode != save
+            text pick.what { at: bx + 16, pby + 37; anchor: left center; size: 13.5; weight: 600; family: "Manrope"; color: ink; width: lw; lines: 1 }
+        }
+        group {
+            show: pick.mode == save
+            box { from: bx + 12, pby + 24; size: lw, 26; corner: Rs; color: bg }
+            box { from: bx + 12, pby + 24; size: lw, 26; corner: Rs; stroke: 1; color: acc; opacity: 45% }
+            input pickname { at: bx + 22, pby + 37 - 8.45; width: lw - 20; size: 13; family: "Manrope"; color: ink; placeholder: "File name"; label: "File name" }
+        }
+        group {
+            show: pick.filters > 1
+            let fx = bx + bw - aw - 110 - fw - 12
+            zone box pfbtn { from: fx, pby + 12; size: fw - 8, 32; corner: Rs; cursor: pointer; label: "Kind of file"; value: "{pick.filter}" }
+            box { from: fx, pby + 12; size: fw - 8, 32; corner: Rs; color: ink; opacity: 6% + 6% * pfbtn.hover }
+            text pick.filter { at: fx + 12, pby + 28; anchor: left center; size: 12; weight: 600; family: "Manrope"; color: dim; width: fw - 46; lines: 1 }
+            path { at: fx + fw - 24, pby + 28; stroke: 1.5; color: dim; move -4, -2; line 0, 2; line 4, -2 }
+            on press pfbtn { emit pick_filter }
+        }
+        zone box pcancel { from: bx + bw - aw - 106, pby + 12; size: 96, 32; corner: Rs; cursor: pointer; label: "Cancel" }
+        box { from: bx + bw - aw - 106, pby + 12; size: 96, 32; corner: Rs; color: ink; opacity: 7% + 6% * pcancel.hover }
+        text "Cancel" { at: bx + bw - aw - 58, pby + 28; anchor: center; size: 13; weight: 600; family: "Manrope"; color: ink }
+        zone box paccept { from: bx + bw - aw - 4, pby + 12; size: aw - 8, 32; corner: Rs; cursor: pointer; active: pick.ok; label: "{pick.accept}" }
+        box { from: bx + bw - aw - 4, pby + 12; size: aw - 8, 32; corner: Rs; color: acc; opacity: if(pick.ok, 88% + 12% * paccept.hover, 25%) }
+        text pick.accept { at: bx + bw - aw / 2 - 8, pby + 28; anchor: center; size: 13; weight: 650; family: "Manrope"; color: on_acc; width: aw - 20; lines: 1; align: center }
+        on press pcancel { emit pick_cancel }
+        on press paccept { emit pick_accept }
+    }
+    on submit pickname { emit pick_accept }
 
     // ═════════════════ a note at the bottom ═════════════════
     prop note = 0 ~calm
     on change toasted { note: 1 }
     on still toasted for 2800ms { note: 0 }
+    let ny = iy - 54 * selp - jobs.count * 54
     group {
         show: note > 0.01
         opacity: note
-        pivot: mx + mw / 2, H - 34
-        scale: 0.9 + 0.1 * note
+        pivot: mx + mw / 2, ny + 24
+        scale: 0.94 + 0.06 * note
         measure toasttext
-        body {
-            color: #0f1312
-            rim: 18%
-            shadow: 0, 12, 30, 45%
-            box { at: mx + mw / 2, H - 34 + 8 * (1 - note); size: toasttext.width + 56, 36; corner: 18 }
-        }
-        ellipse { at: mx + mw / 2 - toasttext.width / 2 - 12, H - 34 + 8 * (1 - note); radius: 4; color: mint }
-        text "{toast}" { at: mx + mw / 2 + 6, H - 34 + 8 * (1 - note); anchor: center; size: 12; weight: 600; color: ink; measure: toasttext }
+        box { at: mx + mw / 2, ny + 24 + 8 * (1 - note); size: toasttext.width + 52, 40; corner: 20; color: bruma; opacity: 96% }
+        box { at: mx + mw / 2, ny + 24 + 8 * (1 - note); size: toasttext.width + 52, 40; corner: 20; stroke: 1; color: ink; opacity: 11% }
+        box { at: mx + mw / 2 - toasttext.width / 2 - 12, ny + 24 + 8 * (1 - note); size: 5, 5; corner: 1.5 * gr + 0.4; color: acc }
+        text "{toast}" { at: mx + mw / 2 + 6, ny + 24 + 8 * (1 - note); anchor: center; size: 13; weight: 550; family: "Manrope"; color: ink; measure: toasttext }
     }
 
     // ═════════════════ keys ═════════════════
     on key Escape while addr.on { emit addr_close }
     on key Tab while addr.on { emit addr_complete }
+    on key Tab while not addr.on and not ask.open and not pick.on { emit tab_key }
     on key Escape while menu.open { menu.open = false }
     on key Escape while ask.open { emit ask_cancel }
-    on key Escape while not addr.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and mode == search { emit clear_search }
-    on key Escape while not addr.on and pick.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and not settings.open and mode == browse { emit pick_cancel }
+    on key Escape while not addr.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and (mode == search or finding) { emit clear_search }
+    on key Escape while not addr.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and mode == browse and not finding and chosen.count > 1 and not pick.on { emit sel_clear }
+    on key Escape while not addr.on and pick.on and not menu.open and not ask.open and not cf.open and not ow.open and not pr.open and not settings.open and mode == browse and not finding { emit pick_cancel }
     on key Ctrl+z while not ask.open and not addr.on { emit undo }
     on key Alt+Return { emit act(15) }
     on key Ctrl+f { focus query }
     on key Ctrl+l { emit addr_open }
+    on key Ctrl+t while not pick.on { emit tab_new }
+    on key Ctrl+w while not pick.on { emit tab_close(tab.on) }
+    on key Ctrl+Page_Down { emit tab_step(1) }
+    on key Ctrl+Page_Up { emit tab_step(-1) }
     on key Alt+Left { emit nav(0) }
     on key Alt+Right { emit nav(1) }
     on key Alt+Up { emit nav(2) }
@@ -1356,56 +1580,78 @@ scene Sonda {
         "A folder: ~/Documents, /mnt/disk…" = "Una carpeta: ~/Documentos, /mnt/disco…"
         "No folder starts like that" = "Ninguna carpeta empieza así"
         "There is no such folder" = "No existe esa carpeta"
-        "Reading" = "Lectura"
-        "Up to date" = "Al día"
-        "Not running" = "Detenida"
+        "PLACES" = "LUGARES"
+        "PINNED" = "FIJADAS"
+        "DISKS" = "DISCOS"
+        "SONDA READS" = "SONDA LEE"
+        "UP TO DATE" = "AL DÍA"
+        "PAUSED" = "EN PAUSA"
+        "NOT RUNNING" = "DETENIDA"
+        "read" = "leídos"
         "Resume reading" = "Seguir leyendo"
         "Pause reading" = "Pausar la lectura"
-        "▶  Resume" = "▶  Seguir"
-        "❙❙  Pause" = "❙❙  Pausar"
         "Back" = "Atrás"
         "Forward" = "Adelante"
         "Up" = "Arriba"
         "Search" = "Buscar"
-        "What the code does…" = "Lo que hace el código…"
-        "Describe what you are looking for…" = "Describe lo que buscas…"
-        "Clear the search" = "Borrar la búsqueda"
+        "Look here" = "Buscar aquí"
+        "Describe it…" = "Descríbelo…"
+        "Look for names" = "Buscar por nombre"
+        "Look for what they hold" = "Buscar por contenido"
+        "Name" = "Nombre"
+        "Content" = "Contenido"
+        "Tiles" = "Cuadrícula"
+        "List" = "Lista"
+        "Columns" = "Columnas"
+        "More" = "Más"
         "All" = "Todo"
         "Pictures" = "Imágenes"
         "Documents" = "Documentos"
+        "Docs" = "Docs"
         "Sound" = "Audio"
         "Video" = "Vídeo"
         "Code" = "Código"
-        "Where to search" = "Dónde buscar"
         "Everywhere" = "En todo"
-        "In this folder" = "En esta carpeta"
-        "Order" = "Orden"
-        "By name" = "Por nombre"
+        "Here" = "Aquí"
+        "By name" = "Nombre"
         "By date" = "Por fecha"
         "By size" = "Por tamaño"
         "By kind" = "Por tipo"
-        "Hidden files" = "Archivos ocultos"
+        "Groups" = "Agrupar"
         "Hidden" = "Ocultos"
-        "Grid or list" = "Cuadrícula o lista"
-        "Preview" = "Vista previa"
+        "NAME" = "NOMBRE"
+        "WHERE" = "DÓNDE"
+        "MODIFIED" = "MODIFICADO"
+        "MODIFIED  ↓" = "MODIFICADO  ↓"
+        "SIZE" = "TAMAÑO"
+        "SIZE  ↓" = "TAMAÑO  ↓"
+        "KIND" = "TIPO"
+        "KIND  ↓" = "TIPO  ↓"
         "The folder" = "La carpeta"
-        "This folder is empty" = "Esta carpeta está vacía"
-        "Drop files here to copy them" = "Suelta archivos aquí para copiarlos"
-        "Nothing that sounds like that" = "Nada suena así"
+        "Nothing here" = "Nada por aquí"
+        "Drop here what you want to bring, or paste it with Ctrl+V." = "Suelta aquí lo que quieras traer, o pégalo con Ctrl+V."
+        "new folder" = "carpeta nueva"
+        "write a path" = "escribir la ruta"
+        "new tab" = "pestaña"
+        "Nothing sounds like that" = "Nada suena así"
         "Try other words, or another kind of file." = "Prueba con otras palabras, o con otro tipo de archivo."
-        "Play here" = "Reproducir ahí"
+        "Play here" = "Reproducir aquí"
         "Open at page" = "Abrir en la página"
         "Open at line" = "Abrir en la línea"
         "Open" = "Abrir"
         "Folder" = "Carpeta"
-        "Copy path" = "Copiar ruta"
         "Choose something to see it here" = "Elige algo para verlo aquí"
         "Close the menu" = "Cerrar el menú"
         "Open where it was found" = "Abrir donde se encontró"
         "Show in its folder" = "Mostrar en su carpeta"
+        "Open in a new tab" = "Abrir en una pestaña"
         "Copy" = "Copiar"
         "Cut" = "Cortar"
         "Paste" = "Pegar"
+        "Compress" = "Comprimir"
+        "Trash" = "Papelera"
+        "chosen" = "elegidos"
+        "Choose none" = "No elegir nada"
         "Rename" = "Renombrar"
         "Rename…" = "Renombrar…"
         "New folder" = "Nueva carpeta"
@@ -1417,20 +1663,16 @@ scene Sonda {
         "Cancel" = "Cancelar"
         "Accept" = "Aceptar"
         "The name" = "El nombre"
-        "A place" = "Un lugar"
         "Stop" = "Parar"
         "Folders it reads" = "Carpetas que lee"
-        "Folders…" = "Carpetas…"
         "Close" = "Cerrar"
         "Folders" = "Carpetas"
         "What Sonda reads" = "Lo que lee Sonda"
         "It reads them in the background and keeps up with what changes. Code is only searched with code:" = "Las lee en segundo plano y sigue sus cambios. El código solo se busca con code:"
-        "By what they hold" = "Por lo que contienen"
-        "As code" = "Como código"
+        "BY WHAT THEY HOLD" = "POR LO QUE CONTIENEN"
+        "AS CODE" = "COMO CÓDIGO"
         "Stop reading {f.name}" = "Dejar de leer {f.name}"
         "Stop reading {f.name} as code" = "Dejar de leer {f.name} como código"
-        "Read this folder" = "Leer esta carpeta"
-        "Read this folder as code" = "Leer esta carpeta como código"
         "+ This folder" = "+ Esta carpeta"
         "+ This folder as code" = "+ Esta, como código"
         "Done" = "Listo"
@@ -1440,6 +1682,8 @@ scene Sonda {
         "folders" = "carpetas"
         "file" = "archivo"
         "files" = "archivos"
+        "items" = "elementos"
+        "item" = "elemento"
         "All read" = "Todo leído"
         "pieces in the index" = "piezas en el índice"
         "of" = "de"
@@ -1447,7 +1691,10 @@ scene Sonda {
         "A video is playing" = "Esperando al vídeo"
         "Looking at the folders…" = "Mirando las carpetas…"
         "The reader is not running" = "El lector no está en marcha"
+        "Reading" = "Leyendo"
+        "to read" = "por leer"
         "page" = "página"
+        "pág." = "pág."
         "at" = "en el"
         "line" = "línea"
         "pages" = "páginas"
@@ -1476,11 +1723,11 @@ scene Sonda {
         "Ctrl+X" = "Ctrl+X"
         "Ctrl+V" = "Ctrl+V"
         "Ctrl+Shift+N" = "Ctrl+Mayús+N"
+        "Ctrl+T" = "Ctrl+T"
         "OK" = "Aceptar"
         "F2" = "F2"
         "PDF" = "PDF"
         "Sonda" = "Sonda"
-        "Drives" = "Unidades"
         "Eject {d.name}" = "Expulsar {d.name}"
         "Stop {j.title}" = "Parar: {j.title}"
         "File name" = "Nombre del archivo"
@@ -1489,8 +1736,8 @@ scene Sonda {
         "Skip" = "Saltar"
         "Keep both" = "Mantener ambos"
         "Replace" = "Reemplazar"
-        "Other programs" = "Otros programas"
-        "Now" = "Ahora"
+        "OTHER PROGRAMS" = "OTROS PROGRAMAS"
+        "NOW" = "AHORA"
         "Always use it for this kind of file" = "Usarlo siempre para este tipo de archivo"
         "Size" = "Tamaño"
         "Holds" = "Contiene"
@@ -1500,7 +1747,11 @@ scene Sonda {
         "Created" = "Creado"
         "Owner" = "Dueño"
         "Points to" = "Apunta a"
-        "Permissions" = "Permisos"
+        "Measures" = "Medidas"
+        "Pages" = "Páginas"
+        "Lasts" = "Dura"
+        "Similar" = "Parecido"
+        "PERMISSIONS" = "PERMISOS"
         "Read" = "Leer"
         "Write" = "Escribir"
         "Run" = "Ejecutar"
@@ -1517,7 +1768,7 @@ scene Sonda {
         "Everyone can read" = "Todos pueden leer"
         "Everyone can write" = "Todos pueden escribir"
         "Everyone can run" = "Todos pueden ejecutar"
-        "Disk" = "Disco"
+        "DISK" = "DISCO"
         "free" = "libres"
         "Stopped" = "Parado"
         "Nothing to undo" = "No hay nada que deshacer"
@@ -1545,7 +1796,6 @@ scene Sonda {
         "Open with…" = "Abrir con…"
         "Extract here" = "Extraer aquí"
         "Compress…" = "Comprimir…"
-        "Compress" = "Comprimir"
         "Properties" = "Propiedades"
         "Undo" = "Deshacer"
         "Open a terminal here" = "Abrir una terminal aquí"
@@ -1563,5 +1813,22 @@ scene Sonda {
         "A name cannot have /" = "Un nombre no puede llevar /"
         "Alt+Enter" = "Alt+Intro"
         "Ctrl+Z" = "Ctrl+Z"
+        "Today" = "HOY"
+        "Yesterday" = "AYER"
+        "This week" = "ESTA SEMANA"
+        "This month" = "ESTE MES"
+        "Earlier" = "ANTES"
+        "Program" = "Programa"
+        "Text" = "Texto"
+        "empty" = "vacía"
+        "names with" = "nombres con"
+        "in" = "en"
+        "and inside" = "y dentro"
+        "found" = "hallazgos"
+        "by what they say, show or sound" = "por lo que dicen, se ve u oye"
+        "Looking for «%s» by what files hold? Press **Tab** and Sonda looks in what they say." = "¿Buscas «%s» por lo que dice dentro? Pulsa **Tab** y Sonda busca en el contenido."
+        "Tab: look for it by what files hold" = "Tab: buscarlo por el contenido"
+        "and more than these" = "y hay más"
+        "Untitled" = "Sin título"
     }
 }

@@ -18,6 +18,9 @@ pub struct Drive {
     /// A stick or a card: it can be ejected.
     pub removable: bool,
     pub icon: String,
+    /// Mounted: how full it is (0 to 1) and what is free.
+    pub used: f32,
+    pub free_text: String,
 }
 
 /// Mounted where the system lives: not a drive to show.
@@ -38,10 +41,14 @@ fn walk(v: &Value, parent_removable: bool, parent_model: &str, out: &mut Vec<Dri
         let label = v["label"].as_str().filter(|s| !s.is_empty()).map(String::from);
         let es = crate::files::spanish();
         let name = label.unwrap_or_else(|| if model.is_empty() { format!("{} {}", if es { "Volumen de" } else { "Volume," }, crate::files::size_text(size)) } else { model.clone() });
+        let mount = mounts.first().cloned().unwrap_or_default();
+        let space = if mount.is_empty() { None } else { crate::files::disk_space(std::path::Path::new(&mount)) };
         out.push(Drive {
             name,
             dev: v["path"].as_str().unwrap_or("").to_owned(),
-            mount: mounts.first().cloned().unwrap_or_default(),
+            used: space.map_or(0.0, |(free, total)| 1.0 - free as f32 / total.max(1) as f32),
+            free_text: space.map(|(free, _)| crate::files::size_text(free)).unwrap_or_default(),
+            mount,
             size_text: crate::files::size_text(size),
             removable,
             icon: if kind == "rom" { "media-optical" } else if removable { "drive-removable-media" } else { "drive-harddisk" }.into(),

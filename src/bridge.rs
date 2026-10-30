@@ -80,8 +80,63 @@ pub fn places() -> Value {
         }
     }
     items.push(json!({ "name": if es { "Papelera" } else { "Trash" }, "path": files::trash_dir().to_string_lossy(), "icon": "trash" }));
-    items.push(json!({ "name": if es { "Equipo" } else { "Computer" }, "path": "/", "icon": "computer" }));
-    json!({ "t": "places", "items": items, "home": home.to_string_lossy(), "trash": files::trash_dir().to_string_lossy() })
+    // The folders pinned (the desktop's bookmarks: GTK's file, shared by its file managers).
+    let mut pins = Vec::new();
+    if let Ok(t) = std::fs::read_to_string(crate::paths::config_home().join("gtk-3.0/bookmarks")) {
+        for line in t.lines() {
+            let (url, label) = line.split_once(' ').map_or((line, None), |(u, l)| (u, Some(l.trim())));
+            let Some(p) = url.strip_prefix("file://") else { continue };
+            let p = percent_decoded(p);
+            if !Path::new(&p).is_dir() {
+                continue;
+            }
+            let name = label.filter(|l| !l.is_empty()).map(String::from).unwrap_or_else(|| Path::new(&p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone()));
+            pins.push(json!({ "name": name, "path": p }));
+        }
+    }
+    // The disk the system is on: what is free, and how full.
+    let (free, total) = files::disk_space(Path::new("/")).unwrap_or((0, 1));
+    let system = json!({ "name": if es { "Sistema" } else { "System" }, "path": "/", "free_text": files::size_text(free), "used": 1.0 - free as f64 / total.max(1) as f64 });
+    json!({ "t": "places", "items": items, "pins": pins, "system": system, "home": home.to_string_lossy(), "trash": files::trash_dir().to_string_lossy() })
+}
+
+/// `%20` and the like in a bookmark's address, as the path's own bytes.
+fn percent_decoded(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The desktop's look, when its shell says one (Calima's Taller, through
+/// pleamar-wm: `link caravan theme`): its accent, its surface, its ink,
+/// whether it is dark, how round its corners are and whether its grains move.
+/// The window takes it, and follows it when it changes.
+fn theme() -> Value {
+    let mut places = Vec::new();
+    if let Some(c) = std::env::var_os("PLEAMAR_CONFIG").filter(|c| !c.is_empty()) {
+        places.push(PathBuf::from(c).join("state/caravan-theme.json"));
+    }
+    let state = std::env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or_else(|| crate::paths::home().join(".local/state"));
+    places.push(state.join("pleamar-wm/caravan-theme.json"));
+    places.push(crate::paths::config_home().join("calima/state/caravan-theme.json"));
+    for p in places {
+        if let Some(v) = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).filter(Value::is_object) {
+            return json!({ "t": "theme", "theme": v });
+        }
+    }
+    json!({ "t": "theme", "theme": null })
 }
 
 fn crumbs(path: &Path) -> Vec<Value> {
@@ -214,11 +269,21 @@ fn handle(req: &Value, out: &Arc<Out>, thumbs: &Arc<Thumbs>, jobs: &Arc<jobs::Jo
     let op = req["op"].as_str().unwrap_or("");
     match op {
         "places" => out.send(places()),
+        "theme" => out.send(theme()),
         "where" => out.send(where_to(req["text"].as_str().unwrap_or(""), req["base"].as_str().unwrap_or("/"), req["complete"].as_bool().unwrap_or(false))),
         "list" => {
             let path = PathBuf::from(req["path"].as_str().unwrap_or("/"));
             let hidden = req["hidden"].as_bool().unwrap_or(false);
             let sort = req["sort"].as_str().unwrap_or("name");
+            // A folder above, for the columns: only its names, and the folder
+            // shown keeps its small pictures coming.
+            if req["col"].as_bool().unwrap_or(false) {
+                match files::list(&path, hidden, sort) {
+                    Ok(items) => out.send(json!({ "t": "list", "col": true, "path": path.to_string_lossy(), "items": items })),
+                    Err(e) => out.send(json!({ "t": "error", "op": "col", "path": path.to_string_lossy(), "error": e.to_string() })),
+                }
+                return Ok(());
+            }
             let generation_id = thumbs.generation.fetch_add(1, Ordering::Relaxed) + 1;
             match files::list(&path, hidden, sort) {
                 Ok(mut items) => {

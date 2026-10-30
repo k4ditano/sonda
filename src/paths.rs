@@ -16,6 +16,11 @@ pub fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
 }
 
+/// The desktop's settings (`XDG_CONFIG_HOME`, ~/.config).
+pub fn config_home() -> PathBuf {
+    env_dir("XDG_CONFIG_HOME", ".config")
+}
+
 pub fn data() -> PathBuf {
     let d = env_dir("XDG_DATA_HOME", ".local/share").join("sonda");
     let _ = std::fs::create_dir_all(&d);

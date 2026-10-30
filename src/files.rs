@@ -26,6 +26,8 @@ pub struct Entry {
     /// An icon name, for what has no picture of its own.
     pub icon: String,
     pub hidden: bool,
+    /// When, for a list in groups: 0 today, 1 yesterday, 2 this week, 3 this month, 4 earlier.
+    pub when: u8,
 }
 
 pub fn spanish() -> bool {
@@ -65,6 +67,21 @@ pub fn date_text(t: f64) -> String {
         format!("{d} {month}")
     } else {
         format!("{d} {month} {y}")
+    }
+}
+
+/// When a moment was, for a list in groups: 0 today, 1 yesterday, 2 these
+/// last seven days, 3 these last thirty, 4 earlier.
+pub fn when(t: f64) -> u8 {
+    let now = std::time::SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+    let tz = local_offset();
+    let days = ((now + tz) / 86400.0).floor() as i64 - ((t + tz) / 86400.0).floor() as i64;
+    match days {
+        ..=0 => 0,
+        1 => 1,
+        2..=6 => 2,
+        7..=30 => 3,
+        _ => 4,
     }
 }
 
@@ -140,7 +157,7 @@ pub fn entry(path: &Path) -> Option<Entry> {
     } else {
         size_text(size)
     };
-    Some(Entry { hidden: name.starts_with('.'), name, path: path.to_string_lossy().into_owned(), dir, kind: kind.into(), size, mtime, size_text, date_text: date_text(mtime), icon: icon.into() })
+    Some(Entry { hidden: name.starts_with('.'), name, path: path.to_string_lossy().into_owned(), dir, kind: kind.into(), size, mtime, size_text, date_text: date_text(mtime), icon: icon.into(), when: when(mtime) })
 }
 
 /// What a folder holds: folders first, then by `sort` (name, date, size, kind).
@@ -757,13 +774,19 @@ pub fn ui_dir() -> PathBuf {
     d
 }
 
-const UI: &[(&str, &str)] = &[
-    ("sonda.plm", include_str!("../ui/sonda.plm")),
-    ("sonda.luau", include_str!("../ui/sonda.luau")),
-    ("shaders/deep.wgsl", include_str!("../ui/shaders/deep.wgsl")),
-    ("shaders/ping.wgsl", include_str!("../ui/shaders/ping.wgsl")),
-    ("shaders/fill.wgsl", include_str!("../ui/shaders/fill.wgsl")),
-    ("art/anchor.svg", include_str!("../ui/art/anchor.svg")),
+const UI: &[(&str, &[u8])] = &[
+    ("sonda.plm", include_bytes!("../ui/sonda.plm")),
+    ("sonda.luau", include_bytes!("../ui/sonda.luau")),
+    ("shaders/glyph.wgsl", include_bytes!("../ui/shaders/glyph.wgsl")),
+    ("shaders/grains.wgsl", include_bytes!("../ui/shaders/grains.wgsl")),
+    // Calima's letters (SIL Open Font License, beside each): titles and figures,
+    // the interface, and what is data.
+    ("fonts/Newsreader-Variable.ttf", include_bytes!("../ui/fonts/Newsreader-Variable.ttf")),
+    ("fonts/Newsreader-OFL.txt", include_bytes!("../ui/fonts/Newsreader-OFL.txt")),
+    ("fonts/Manrope-Variable.ttf", include_bytes!("../ui/fonts/Manrope-Variable.ttf")),
+    ("fonts/Manrope-OFL.txt", include_bytes!("../ui/fonts/Manrope-OFL.txt")),
+    ("fonts/JetBrainsMono-Variable.ttf", include_bytes!("../ui/fonts/JetBrainsMono-Variable.ttf")),
+    ("fonts/JetBrainsMono-OFL.txt", include_bytes!("../ui/fonts/JetBrainsMono-OFL.txt")),
 ];
 
 fn write_ui() -> Result<PathBuf> {
@@ -777,7 +800,7 @@ fn write_ui() -> Result<PathBuf> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        if std::fs::read_to_string(&path).ok().as_deref() != Some(*text) {
+        if std::fs::read(&path).ok().as_deref() != Some(*text) {
             std::fs::write(&path, text)?;
         }
     }

@@ -4,20 +4,74 @@
 
 local ROWS_GRID, ROWS_LINES = 12, 30   -- rows the scene holds (rows max 30)
 local MAX_COLS = 10         -- tiles a row holds (cells max 10)
-local GRID_H, LINES_H = 168, 38
+local GRID_H, LINES_H = 178, 38
 
 local KIND_NAME = {
     folder = "Folder", image = "Picture", screenshot = "Screenshot", pdf = "PDF", doc = "Document",
     audio = "Sound", video = "Video", code = "Code", archive = "Archive", other = "File",
 }
-local FILTERS = { "all", "image", "pdf", "doc", "audio", "video", "code" }
-local PLACE_ICONS = {
-    home = "user-home", desktop = "user-desktop", documents = "folder-documents", downloads = "folder-download",
-    pictures = "folder-pictures", music = "folder-music", videos = "folder-videos", projects = "folder-projects",
-    trash = "user-trash", computer = "computer",
+
+-- What a kind looks like in grains: five rows of five (Calima's grains), as
+-- the scene's glyph shader takes them: rows 0–2 and rows 3–4, each grain a bit.
+local GLYPH_ROWS = {
+    folder = { "00000", "11100", "11111", "11111", "11111" },
+    image = { "10000", "00010", "00111", "01111", "11111" },
+    screenshot = { "11011", "10001", "00000", "10001", "11011" },
+    pdf = { "11100", "11110", "11111", "11111", "11111" },
+    doc = { "11111", "00000", "11111", "00000", "11100" },
+    audio = { "00100", "10101", "11111", "10101", "00100" },
+    video = { "01000", "01100", "01110", "01100", "01000" },
+    code = { "01010", "10001", "10001", "10001", "01010" },
+    archive = { "01110", "00100", "01110", "00100", "01110" },
+    other = { "10101", "01010", "10101", "01010", "10101" },
+    home = { "00100", "01110", "11111", "01110", "01010" },
+    desktop = { "11111", "10001", "11111", "00100", "01110" },
+    documents = { "11111", "00000", "11111", "00000", "11100" },
+    downloads = { "00100", "00100", "10101", "01110", "11111" },
+    pictures = { "10000", "00010", "00111", "01111", "11111" },
+    music = { "00111", "00101", "00101", "11101", "11000" },
+    videos = { "01000", "01100", "01110", "01100", "01000" },
+    projects = { "01010", "10001", "10001", "10001", "01010" },
+    trash = { "11111", "01010", "01010", "01010", "01110" },
+    computer = { "11111", "10001", "11111", "00100", "11111" },
 }
+local GLYPHS = {}
+for k, rows in pairs(GLYPH_ROWS) do
+    local lo, hi = 0, 0
+    for r = 1, 5 do
+        for c = 1, 5 do
+            if rows[r]:sub(c, c) == "1" then
+                if r <= 3 then lo = lo + 2 ^ ((r - 1) * 5 + c - 1) else hi = hi + 2 ^ ((r - 4) * 5 + c - 1) end
+            end
+        end
+    end
+    GLYPHS[k] = { lo, hi }
+end
+local function glyph(kind)
+    return GLYPHS[kind] or GLYPHS.other
+end
+
+-- A number as a person writes it: 12480 → «12.480» (or «12,480»).
+local function thousands(n)
+    local s = tostring(math.floor(n or 0))
+    local sep = tr("of") == "de" and "." or ","
+    local out = s:reverse():gsub("(%d%d%d)", "%1" .. sep):reverse()
+    return (out:gsub("^%" .. sep, ""))
+end
+local FILTERS = { "all", "image", "pdf", "doc", "audio", "video", "code" }
+
 
 local bridge = nil
+-- Every handler kept by its name too: a dialog's buttons and the chips say a
+-- code, and the code calls the handler it stands for.
+local H = {}
+do
+    local on_scene = on
+    on = function(name, fn)
+        H[name] = fn
+        return on_scene(name, fn)
+    end
+end
 -- What Ctrl+Z says it undid.
 local UNDONE = {
     copy = "the copy", move = "the move", rename = "the new name", trash = "into the trash",
@@ -33,6 +87,10 @@ local s = {
     first = 0, token = 0, menu_index = nil, asking = nil, editing = false,
     lastpress = nil, lastpressed = false, refresh_due = false, status_due = false,
     jobs = {}, drives = {}, mounting = {}, scrolls = {}, scroll_px = 0, pick = nil, pickfilter = 1, apps = {}, writable = true,
+    -- What writing looks for (names here and inside, or what files hold), the
+    -- names found, the list's groups, the columns down the tree, the tabs.
+    skind = "name", finding = false, folder_items = nil, group = true, mcols = 3, colsv = {}, pins = {},
+    tabs = {}, tab = 1, findgen = 0,
 }
 
 local function send(t)
@@ -55,45 +113,120 @@ local function dirname(p)
 end
 
 local function tile_h()
-    return s.view == "grid" and GRID_H or LINES_H
+    return (s.view == "grid" and not s.finding) and GRID_H or LINES_H
 end
 
 local function cols()
-    return s.view == "grid" and s.cols or 1
+    return (s.view == "grid" and not s.finding) and s.cols or 1
 end
 
 -- ── the folder, as rows of tiles: only the rows near what is seen ──
 
+-- A name with its extension apart: «**calima-1**.png», and the words looked for in bold.
+local function split_name(name, dir)
+    if dir then return name, "" end
+    local base, ext = name:match("^(.+)%.([%w]+)$")
+    if not base or #ext > 6 then return name, "" end
+    return base, ext
+end
+
+local function md(x)
+    return (x:gsub("([%*_`%[%]\\#])", "\\%1"))
+end
+
+-- The name as the scene shows it: the base in bold (or the words looked for), the extension light.
+local function name_md(e)
+    local base, ext = split_name(e.name or "", e.dir)
+    local q = s.finding and s.lastfind or nil
+    local shown
+    if q and q ~= "" and not q:find("[%*%?]") then
+        shown = md(base)
+        for w in q:gmatch("%S+") do
+            if #w >= 2 then
+                local pat = md(w):gsub("%p", "%%%0"):gsub("%a", function(ch) return "[" .. ch:lower() .. ch:upper() .. "]" end)
+                shown = shown:gsub("(" .. pat .. ")", "**%1**")
+            end
+        end
+    else
+        shown = "**" .. md(base) .. "**"
+    end
+    return shown .. (ext ~= "" and ("." .. md(ext)) or "")
+end
+
+local KIND_LABEL = { folder = "Folder", image = "Picture", screenshot = "Screenshot", pdf = "PDF", doc = "Document", audio = "Sound", video = "Video", code = "Code", archive = "Archive", other = "File" }
+
+-- How big, in grains: ten for a gigabyte and more, one for a kilobyte.
+local function size_grains(n)
+    if not n or n <= 0 then return 0 end
+    return math.max(0, math.min(10, (math.log10(n) - 2.5) * 10 / 6.5))
+end
+
 local function cell(i, e)
     local th = s.thumbs[e.path]
+    local g = glyph(e.dir and "folder" or e.kind)
+    local _, ext = split_name(e.name or "", e.dir)
     return {
-        at = i - 1, name = e.name, path = e.path, kind = e.kind, video = e.kind == "video", dir = e.dir,
-        thumb = th or "", has = nil, ["has.thumb"] = th ~= nil, icon = e.icon or "text-x-generic",
-        picked = s.picked[e.path] == true, size = e.size_text or "", date = e.date_text or "", hidden = e.hidden == true,
+        at = i - 1, name = e.name, nm = name_md(e), path = e.path, kind = e.kind, ext = ext:upper(), video = e.kind == "video", dir = e.dir,
+        thumb = th or "", ["has.thumb"] = th ~= nil and not e.dir, lo = g[1], hi = g[2],
+        picked = s.picked[e.path] == true, size = e.size_text or "", sz = size_grains(e.size), date = e.date_text or "",
+        kname = tr(e.dir and "Folder" or (KIND_LABEL[e.kind] or "File")), folder = e.folder or "", hidden = e.hidden == true,
+        n = e.dir and (e.size or 0) or 0,
     }
 end
 
-local function show_rows()
-    local ROW_WINDOW = s.view == "grid" and ROWS_GRID or ROWS_LINES
+-- The list in groups (by day when it goes by date, by kind when by kind): a row for each group's name.
+local WHEN = { [0] = "Today", [1] = "Yesterday", [2] = "This week", [3] = "This month", [4] = "Earlier" }
+local function grouped()
+    return s.view == "lines" and not s.finding and s.group and (s.sort == "date" or s.sort == "kind")
+end
+
+-- What each row of the scene holds: a group's name, or a run of things (a row of tiles, one line).
+local function display()
+    local d, row_of = {}, {}
     local c = cols()
-    local n = #s.items
-    local total = math.ceil(n / c)
+    if s.finding or s.view ~= "grid" then c = 1 end
+    if grouped() then
+        local last = nil
+        for i, e in ipairs(s.items) do
+            local key = s.sort == "date" and tr(WHEN[e.when or 4]) or (e.dir and tr("Folder") or tr(KIND_LABEL[e.kind] or "File")):upper()
+            if key ~= last then
+                d[#d + 1] = { head = key }
+                last = key
+            end
+            d[#d + 1] = { from = i, to = i }
+            row_of[i] = #d - 1
+        end
+    else
+        local n = #s.items
+        for r = 0, math.ceil(n / c) - 1 do
+            d[#d + 1] = { from = r * c + 1, to = math.min(r * c + c, n) }
+            for i = r * c + 1, math.min(r * c + c, n) do row_of[i] = r end
+        end
+    end
+    s.disp, s.row_of = d, row_of
+end
+
+local function show_rows()
+    local ROW_WINDOW = (s.view == "grid" and not s.finding) and ROWS_GRID or ROWS_LINES
+    display()
+    local total = #s.disp
     fact.total = total
     local first = math.max(0, math.min(s.first, math.max(total - ROW_WINDOW, 0)))
     local rows = {}
     for r = 1, ROW_WINDOW do
-        local row = first + r - 1
-        if row >= total then break end
+        local d = s.disp[first + r]
+        if not d then break end
         local cells = {}
-        for k = 1, c do
-            local i = row * c + k
-            if i > n then break end
-            cells[k] = cell(i, s.items[i])
+        if d.head then
+            rows[r] = { head = d.head, ishead = true, cells = {} }
+        else
+            for i = d.from, d.to do cells[#cells + 1] = cell(i, s.items[i]) end
+            rows[r] = { head = "", ishead = false, cells = cells }
         end
-        rows[r] = { cells = cells }
     end
     fact.first = first
     model.rows = rows
+    if s.view == "columns" and not s.finding and s.render_columns then s.render_columns() end
 end
 
 local function refresh_soon()
@@ -217,6 +350,29 @@ local function look_at(entry, hit)
         if info.duration then meta = meta .. " · " .. fmt_time(info.duration) end
     end
     text["look.meta"] = meta
+    -- Over it, what it is; under its name, what there is to know, a row each.
+    local _, ext = split_name(entry.name or basename(entry.path), entry.dir)
+    text["look.label"] = (tr(entry.dir and "Folder" or (KIND_LABEL[entry.kind] or "File")) .. (ext ~= "" and (" · " .. ext) or "")):upper()
+    local g = glyph(entry.dir and "folder" or entry.kind)
+    fact["look.lo"] = g[1]
+    fact["look.hi"] = g[2]
+    local kv = {}
+    kv[#kv + 1] = { k = tr(entry.dir and "Holds" or "Size"), v = entry.size_text or "", mono = false }
+    if hit and hit.info and hit.info ~= json.null then
+        local info = hit.info
+        if info.width and info.height then kv[#kv + 1] = { k = tr("Measures"), v = info.width .. " × " .. info.height, mono = true } end
+        if info.pages then kv[#kv + 1] = { k = tr("Pages"), v = tostring(info.pages), mono = true } end
+        if info.duration then kv[#kv + 1] = { k = tr("Lasts"), v = fmt_time(info.duration), mono = true } end
+    end
+    kv[#kv + 1] = { k = tr("Modified"), v = entry.date_text or "", mono = false }
+    kv[#kv + 1] = { k = tr("Where"), v = text["look.folder"], mono = true }
+    if hit and hit.excerpt and hit.excerpt ~= json.null and entry.kind ~= "code" and entry.kind ~= "doc" and entry.kind ~= "pdf" then
+        local said = tostring(hit.excerpt):gsub("[«»]", ""):gsub("%s+", " ")
+        if #said > 60 then said = said:sub(1, 58) .. "…" end
+        kv[#kv + 1] = { k = "Sonda", v = "«" .. said .. "»", mono = false }
+    end
+    s.lookkv = kv
+    model.lookkv = kv
     local place = hit and place_of(hit) or ""
     text["look.place"] = place ~= "" and (tr("Found") .. " " .. place) or ""
     fact["look.loc"] = place ~= ""
@@ -247,10 +403,30 @@ local function picked_list()
     return list
 end
 
+local function fmt_size(n)
+    local es = tr("of") == "de"
+    local function f(x, unit)
+        local t = x < 10 and string.format("%.1f", x) or string.format("%.0f", x)
+        if es then t = t:gsub("%.", ",") end
+        return t .. " " .. unit
+    end
+    if n < 1000 then return n .. " B" end
+    if n < 1e6 then return f(n / 1e3, "kB") end
+    if n < 1e9 then return f(n / 1e6, "MB") end
+    return f(n / 1e9, "GB")
+end
+
 local function count_picked()
     local n = 0
     for _, on in pairs(s.picked) do if on then n = n + 1 end end
     fact["chosen.count"] = n
+    -- What they take (the files: a folder's own size is not counted here).
+    local bytes = 0
+    local list = s.mode == "browse" and s.items or s.hits
+    for _, e in ipairs(list or {}) do
+        if s.picked[e.path] and not e.dir then bytes = bytes + (e.size or 0) end
+    end
+    text["sel.size"] = bytes > 0 and fmt_size(bytes) or ""
 end
 
 local function choose(i, how)
@@ -293,7 +469,7 @@ end
 
 -- Keeps the chosen one in sight.
 local function scroll_to(i)
-    local row = math.floor((i - 1) / cols())
+    local row = (s.row_of and s.row_of[i]) or math.floor((i - 1) / cols())
     if row < s.first + 1 or row > s.first + 4 then
         s.first = math.max(row - 2, 0)
         show_rows()
@@ -351,9 +527,12 @@ end
 function s.hit_row(i, h)
     local th = s.thumbs[h.path]
     local strength = math.min((h.score or 0) / math.max(s.top_score or 1, 0.001), 1)
+    local place = place_of(h)
+    local g = glyph(h.kind)
+    local folder = (h.folder or ""):gsub("^" .. s.home:gsub("%p", "%%%0"), "~")
     return {
-        name = h.name, path = h.path, kind = h.kind, place = place_of(h), folder = h.folder or "",
-        excerpt = (bolded(h.excerpt):gsub("%s+", " ")), thumb = th or "", ["has.thumb"] = th ~= nil, icon = h.icon or "text-x-generic",
+        name = h.name, path = h.path, kind = h.kind, place = place, hasplace = place ~= "", folder = folder .. ((h.date_text and h.date_text ~= "") and ("  ·  " .. h.date_text) or ""),
+        excerpt = (bolded(h.excerpt):gsub("%s+", " ")), thumb = th or "", ["has.thumb"] = th ~= nil, lo = g[1], hi = g[2],
         picked = s.picked[h.path] == true, strength = strength, date = h.date_text or "",
     }
 end
@@ -361,6 +540,16 @@ end
 local function search(q)
     q = q or text.query or ""
     if q:match("^%s*$") then return end
+    -- A name, here and in what is inside.
+    if s.skind == "name" then
+        s.find(q)
+        return
+    end
+    if s.finding then
+        s.finding = false
+        fact.finding = false
+        fact["fhint.on"] = false
+    end
     s.lastq = q
     s.searchgen = s.searchgen + 1
     fact.searching = true
@@ -382,17 +571,31 @@ local function search(q)
 end
 
 local function clear_search()
+    local was_finding = s.finding
     s.mode = "browse"
     fact.mode = "browse"
     fact.searched = false
     fact.searching = false
     text.query = ""
+    fact["q.empty"] = true
+    s.lastq = ""
     s.hits = {}
     model.hits = {}
     s.picked = {}
     fact.chosen = -1
     look_at(nil)
-    show_rows()
+    text["count.line"] = s.count_line or ""
+    if was_finding then
+        -- Back to the folder, where it was.
+        s.finding = false
+        fact.finding = false
+        fact["fhint.on"] = false
+        s.lastfind = nil
+        s.first = s.folder_first or 0
+        relist()
+    else
+        show_rows()
+    end
 end
 
 -- ── what the bridge says ──
@@ -404,6 +607,7 @@ local function on_line(line)
     if t == "hello" then
         send({ op = "places" })
         send({ op = "status" })
+        send({ op = "theme" })
         local start = sys.ask("env", "SONDA_START")
         if start == nil or start == "" then start = nil end
         s.start = start
@@ -428,13 +632,24 @@ local function on_line(line)
         s.home = m.home or ""
         s.trash = m.trash or ""
         s.places = m.items or {}
-        local rows = {}
-        for i, p in ipairs(s.places) do
-            rows[i] = { name = p.name, path = p.path, icon = PLACE_ICONS[p.icon] or "folder", here = p.path == s.path }
+        s.pins = m.pins or {}
+        s.system = m.system
+        if s.system then
+            text["sys.name"] = s.system.name or ""
+            text["sys.free"] = (s.system.free_text or "") .. " " .. tr("free")
+            fact["sys.used"] = s.system.used or 0
         end
-        model.places = rows
+        s.show_places()
         if s.path == "" then list(s.start or s.home) end
+    elseif t == "theme" then
+        s.take_theme(m.theme)
     elseif t == "list" then
+        -- A folder above, for the columns.
+        if m.col then
+            s.colcache[m.path] = m.items or {}
+            if s.view == "columns" then s.render_columns() end
+            return
+        end
         if m.path ~= s.path then return end
         fact.loading = false
         s.items = m.items or {}
@@ -467,21 +682,42 @@ local function on_line(line)
         fact["can.up"] = m.parent ~= nil and m.parent ~= "" and m.path ~= "/"
         s.parent = m.parent
         local crumbs = {}
-        for i, c in ipairs(m.crumbs or {}) do crumbs[i] = { name = c.name, path = c.path, at = i - 1 } end
+        for i, c in ipairs(m.crumbs or {}) do crumbs[i] = { name = c.name == "/" and "" or c.name, path = c.path, at = i - 1 } end
         s.crumbs = m.crumbs or {}
         model.crumbs = crumbs
         text["folder.name"] = basename(m.path)
         local dirs, files = 0, 0
         for _, e in ipairs(s.items) do if e.dir then dirs = dirs + 1 else files = files + 1 end end
-        text["count.line"] = string.format("%d %s · %d %s", dirs, tr(dirs == 1 and "folder" or "folders"), files, tr(files == 1 and "file" or "files")) .. ((m.free and m.free ~= "") and (" · " .. m.free .. " " .. tr("free")) or "")
+        s.count_line = string.format("**%d %s** · %d %s", dirs, tr(dirs == 1 and "folder" or "folders"), files, tr(files == 1 and "file" or "files")) .. ((m.free and m.free ~= "") and (" · " .. m.free .. " " .. tr("free")) or "")
+        if #s.items == 0 then s.count_line = tr("empty") end
+        text["count.line"] = s.count_line
+        s.tab_name()
         s.writable = m.writable ~= false
         if s.show_drives then s.show_drives() end
-        local rows = {}
-        for i, p in ipairs(s.places) do
-            rows[i] = { name = p.name, path = p.path, icon = PLACE_ICONS[p.icon] or "folder", here = p.path == s.path }
+        -- By date: by day first (the folders of a day before its files), for the list's groups.
+        if s.sort == "date" then
+            local order = {}
+            for i, e in ipairs(s.items) do order[e] = i end
+            table.sort(s.items, function(a, b)
+                local wa, wb = a.when or 4, b.when or 4
+                if wa ~= wb then return wa < wb end
+                return order[a] < order[b]
+            end)
         end
-        model.places = rows
+        if s.finding and not m.keep then
+            text.query = ""
+            fact["q.empty"] = true
+            s.lastfind = nil
+            s.lastq = ""
+        end
+        if not m.keep or not s.finding then
+            s.finding = false
+            fact.finding = false
+            fact["fhint.on"] = false
+        end
+        s.show_places()
         show_rows()
+        if s.view == "columns" then s.show_columns() end
         if s.mode == "browse" then
             local still_chosen = nil
             for i, e in ipairs(s.items) do if s.picked[e.path] then still_chosen = i end end
@@ -491,7 +727,8 @@ local function on_line(line)
                 s.anchor = still_chosen
                 look_at(s.items[still_chosen], nil)
                 -- Brought into sight (a file shown in its folder from a search).
-                local row = math.floor((still_chosen - 1) / cols())
+                display()
+                local row = s.row_of[still_chosen] or math.floor((still_chosen - 1) / cols())
                 -- The rows held start a little above it only when it lies past
                 -- what they reach from the top; otherwise the first rows, which
                 -- are in sight, would be left out.
@@ -527,10 +764,20 @@ local function on_line(line)
         s.hits = m.hits or {}
         s.top_score = (s.hits[1] and s.hits[1].score) or 1
         fact["found.n"] = #s.hits
+        text["count.line"] = string.format("**%d %s** %s", #s.hits, tr("found"), tr("by what they say, show or sound"))
         local rows = {}
         for i, h in ipairs(s.hits) do rows[i] = s.hit_row(i, h) end
         model.hits = rows
         if #s.hits > 0 then choose(1) else look_at(nil) end
+    elseif t == "found" then
+        if m.id ~= s.findgen then return end
+        fact.searching = false
+        if not s.finding then s.folder_first = s.first end
+        s.finding = true
+        fact.finding = true
+        s.found_all = m.items or {}
+        s.found_more = m.more == true
+        s.apply_find_filter()
     elseif t == "preview" then
         if m.token ~= s.token then return end
         if m.image and m.image ~= json.null then
@@ -549,6 +796,10 @@ local function on_line(line)
         end
         if m.folder_size and m.folder_size ~= json.null then
             text["look.meta"] = tr("Folder") .. " · " .. m.folder_size .. " · " .. (s.look_entry and s.look_entry.size_text or "")
+            if s.lookkv and s.lookkv[1] then
+                s.lookkv[1].v = m.folder_size .. " · " .. (s.look_entry and s.look_entry.size_text or "")
+                model.lookkv = s.lookkv
+            end
         end
     elseif t == "done" then
         if m.job then
@@ -585,7 +836,9 @@ local function on_line(line)
             if m.op == "mount" and m.path and m.path ~= "" then go(m.path) end
         end
         if m.op ~= "open" and m.op ~= "clip" and m.op ~= "open_with" and m.op ~= "terminal" and m.op ~= "mount" and m.op ~= "props" then
-            if s.mode == "browse" then relist() else search(s.lastq) end
+            s.colcache = {}
+            if s.finding and s.lastfind then s.find(s.lastfind)
+            elseif s.mode == "browse" then relist() else search(s.lastq) end
         end
     elseif t == "job" then
         local j = s.jobs[m.id] or { shown = false }
@@ -661,7 +914,11 @@ local function on_line(line)
         else
             text["status.line"] = string.format("%s · %d %s", tr("All read"), done, tr("files"))
         end
-        text["status.file"] = (st.current and st.current ~= "") and basename(st.current) or string.format("%d %s", st.vectors or 0, tr("pieces in the index"))
+        text["status.file"] = string.format("%s %s", thousands(st.vectors or 0), tr("pieces in the index"))
+        text["read.num"] = thousands(done)
+        if st.phase == "reading" and st.current and st.current ~= "" then
+            text["status.line"] = string.format("%s **%s** · %s %s", tr("Reading"), md(basename(st.current)), thousands(pending), tr("to read"))
+        end
     elseif t == "where" then
         if m.complete then
             if m.text then text.location = m.text end
@@ -703,7 +960,10 @@ start_bridge()
 -- The scene says how many columns fit as soon as it knows the logic is here.
 fact["ui.ready"] = true
 
-every(2000, function() send({ op = "status" }) end)
+every(2000, function()
+    send({ op = "status" })
+    send({ op = "theme" })
+end)
 
 -- ── the scene's events ──
 
@@ -818,7 +1078,8 @@ local function menu_rows(on_item)
             add(0, "Open", "Enter")
             if fact["look.loc"] and s.mode == "search" then add(1, "Open where it was found") end
             if n == 1 and entry and not entry.dir and not picking then add(12, "Open with…") end
-            if s.mode == "search" then add(2, "Show in its folder") end
+            if s.mode == "search" or s.finding then add(2, "Show in its folder") end
+            if n == 1 and entry and entry.dir and not picking then add(18, "Open in a new tab", "Ctrl+T") end
             add(3, "Copy", "Ctrl+C")
             add(4, "Cut", "Ctrl+X")
             if s.clip and s.mode == "browse" then add(5, "Paste", "Ctrl+V") end
@@ -850,6 +1111,7 @@ local function open_menu(on_item)
     model.menu = menu_rows(on_item)
     fact["menu.open"] = true
 end
+H.open_menu_item = function() open_menu(true) end
 
 on("tile_menu", function(k)
     local e = s.items[k + 1]
@@ -941,6 +1203,8 @@ on("act", function(k)
         send({ op = "terminal", path = s.path })
     elseif k == 17 then
         send({ op = "undo" })
+    elseif k == 18 then
+        if entry and entry.dir then s.tab_new(entry.path) end
     end
 end)
 
@@ -973,9 +1237,12 @@ on("look_act", function(k)
         local at = s.look_hit and s.look_hit.loc
         if at == json.null then at = nil end
         if not (media and play_here(e, at)) then open_entry(e, s.look_hit) end
+    elseif k == 4 then
+        if not s.picked[e.path] then s.picked = { [e.path] = true } end
+        H.open_menu_item()
     elseif k == 2 then
         local dir = e.dir and e.path or dirname(e.path)
-        if s.mode == "search" then clear_search() end
+        if s.mode == "search" or s.finding then clear_search() end
         s.picked = { [e.path] = true }
         go(e.dir and dirname(e.path) or dir)
     elseif k == 3 then
@@ -1003,23 +1270,26 @@ on("set_cols", function(n)
 end)
 
 on("set_view", function(v)
-    s.view = v == 1 and "lines" or "grid"
+    s.view = ({ [0] = "grid", [1] = "lines", [2] = "columns" })[v] or "grid"
     fact.view = s.view
     s.first = 0
     show_rows()
+    if s.view == "columns" then s.show_columns() end
 end)
 
 on("set_sort", function()
     local order = { name = "date", date = "size", size = "kind", kind = "name" }
     s.sort = order[s.sort] or "name"
     fact.sort = s.sort
+    s.colcache = {}
     relist()
 end)
 
 on("toggle_hidden", function()
     s.hidden = not s.hidden
     fact.hidden = s.hidden
-    relist()
+    s.colcache = {}
+    if s.finding and s.lastfind then s.find(s.lastfind) else relist() end
 end)
 
 on("toggle_preview", function()
@@ -1035,7 +1305,8 @@ end)
 on("set_filter", function(k)
     s.filter = k + 1
     fact.filter = FILTERS[k + 1]
-    if s.mode == "search" then search(s.lastq) end
+    if s.finding then s.apply_find_filter()
+    elseif s.mode == "search" then search(s.lastq) end
 end)
 
 on("pause_toggle", function()
@@ -1086,11 +1357,12 @@ local function query_changed(v)
     s.editing = true
     typed_at = typed_at + 1
     local mine = typed_at
+    fact["q.empty"] = v == ""
     if v:match("^%s*$") then
-        if s.mode == "search" then clear_search() end
+        if s.mode == "search" or s.finding then clear_search() end
         return
     end
-    after(380, function()
+    after(s.skind == "name" and 180 or 380, function()
         if mine == typed_at and v ~= s.lastq then search(v) end
     end)
 end
@@ -1100,6 +1372,12 @@ on("text:query", query_changed)
 -- folder. The data comes by the zone's name, which folder by the scene's
 -- event: whichever is second does it.
 local drop_data, drop_at = nil, nil
+local function col_entry_of(n)
+    local k, i = math.floor(n / 1000) + 1, n % 1000 + 1
+    local paths = s.colpaths or {}
+    local items = (k == #paths) and s.items or s.colcache[paths[k] or ""] or {}
+    return items[i]
+end
 local function do_drop()
     if not drop_data or not drop_at then return end
     local data, k = drop_data, drop_at
@@ -1108,6 +1386,16 @@ local function do_drop()
     if k >= 0 then
         local e = s.items[k + 1]
         if e and e.dir then dest = e.path end
+    elseif k <= -1000 then
+        local n = -1000 - k
+        local e = col_entry_of(n)
+        if e and e.dir then dest = e.path end
+    elseif k <= -500 then
+        local t = s.tabs[-500 - k + 1]
+        if t then dest = (-500 - k + 1 == s.tab) and s.path or t.path end
+    elseif k <= -400 then
+        local q = (s.pins or {})[-400 - k + 1]
+        if q then dest = q.path end
     elseif k <= -300 then
         local d = s.drives[-300 - k + 1]
         if not d or d.mount == "" then toast(tr("Open the drive first")); return end
@@ -1135,7 +1423,7 @@ local function do_drop()
     end
     send({ op = "drop", data = data, dest = dest, move = inside })
 end
-for _, zone in ipairs({ "midzone", "t", "place", "cb" }) do
+for _, zone in ipairs({ "midzone", "t", "place", "cb", "pin", "ce", "tb", "drv" }) do
     on("drop:" .. zone, function(data)
         drop_data = data
         do_drop()
@@ -1247,7 +1535,8 @@ end
 function s.show_drives()
     local rows = {}
     for i, d in ipairs(s.drives) do
-        rows[i] = { name = d.name, size = d.size_text or "", icon = d.icon or "drive-harddisk", mounted = (d.mount or "") ~= "", here = under(s.path, d.mount or ""), busy = s.mounting[d.dev] == true }
+        rows[i] = { name = d.name, size = d.size_text or "", free = (d.free_text and d.free_text ~= "") and (d.free_text .. " " .. tr("free")) or "", used = d.used or 0,
+            mounted = (d.mount or "") ~= "", here = under(s.path, d.mount or ""), busy = s.mounting[d.dev] == true, removable = d.removable == true }
     end
     model.drives = rows
 end
@@ -1479,3 +1768,341 @@ on("pick_filter", function()
     if s.mode == "browse" then relist() else search(s.lastq) end
 end)
 on("text:pickname", function() s.editing = true; s.update_pick() end)
+
+-- ── the places, the pinned ones ──
+function s.show_places()
+    local rows = {}
+    for i, p in ipairs(s.places or {}) do
+        local g = glyph(p.icon or "other")
+        rows[i] = { name = p.name, path = p.path, lo = g[1], hi = g[2], here = p.path == s.path }
+    end
+    model.places = rows
+    local pr = {}
+    for i, q in ipairs(s.pins or {}) do pr[i] = { name = q.name, path = q.path, here = q.path == s.path } end
+    model.pins = pr
+end
+
+on("go_pin", function(k)
+    local q = (s.pins or {})[k + 1]
+    if q then go(q.path) end
+end)
+
+on("go_system", function() go("/") end)
+
+-- ── the desktop's look ──
+local function hex3(c)
+    if type(c) ~= "string" or not c:match("^#%x%x%x%x%x%x$") then return nil end
+    return tonumber(c:sub(2, 3), 16) / 255, tonumber(c:sub(4, 5), 16) / 255, tonumber(c:sub(6, 7), 16) / 255
+end
+
+function s.take_theme(th)
+    if type(th) ~= "table" then return end
+    local key = json.encode(th)
+    if key == s.theme_key then return end
+    s.theme_key = key
+    for prefix, c in pairs({ a = th.accent, o = th.on_accent, s = th.surface, i = th.ink }) do
+        local r, g, b = hex3(c)
+        if r then
+            fact["th." .. prefix .. "r"] = r
+            fact["th." .. prefix .. "g"] = g
+            fact["th." .. prefix .. "b"] = b
+        end
+    end
+    fact["th.dk"] = th.dark == false and 0 or 1
+    fact["th.round"] = math.max(0, math.min(tonumber(th.round) or 1, 2))
+end
+
+-- ── names found, here and inside ──
+local FIND_KINDS = { all = nil, image = { image = true, screenshot = true }, pdf = { pdf = true }, doc = { doc = true }, audio = { audio = true } }
+
+function s.find(q)
+    s.lastq = q
+    s.lastfind = q
+    s.findgen = s.findgen + 1
+    fact.searching = true
+    if s.mode == "search" then
+        s.mode = "browse"
+        fact.mode = "browse"
+        s.hits = {}
+        model.hits = {}
+    end
+    send({ op = "find", path = s.path, q = q, hidden = s.hidden, id = s.findgen, filter = s.pick_filter_now and s.pick_filter_now() })
+end
+
+function s.apply_find_filter()
+    local want = FIND_KINDS[FILTERS[s.filter] or "all"]
+    local items = {}
+    for _, e in ipairs(s.found_all or {}) do
+        if not want or (not e.dir and want[e.kind]) then items[#items + 1] = e end
+    end
+    s.items = items
+    s.first = 0
+    s.picked = {}
+    s.chosen = -1
+    fact.chosen = -1
+    fact.count = #items
+    local where = basename(s.path)
+    if s.path == s.home then where = tr("Home") end
+    text["count.line"] = string.format("**%d %s** «%s» %s %s %s%s", #items, tr("names with"), s.lastfind or "", tr("in"), where, tr("and inside"), s.found_more and (" · " .. tr("and more than these")) or "")
+    text.fhint = string.format(tr("Looking for «%s» by what files hold? Press **Tab** and Sonda looks in what they say."), md(s.lastfind or ""))
+    fact["fhint.on"] = true
+    fact["nav.dir"] = 0.3
+    fact["nav.gen"] = fact["nav.gen"] + 1
+    show_rows()
+    if #items > 0 then choose(1) else look_at(nil) end
+end
+
+on("set_skind", function(k)
+    local kind = k == 1 and "content" or "name"
+    if kind == s.skind then return end
+    s.skind = kind
+    fact.skind = kind
+    local q = text.query or ""
+    s.lastq = ""
+    if kind == "content" and s.finding then
+        s.finding = false
+        fact.finding = false
+        fact["fhint.on"] = false
+        s.first = s.folder_first or 0
+        relist()
+    elseif kind == "name" and s.mode == "search" then
+        s.mode = "browse"
+        fact.mode = "browse"
+        fact.searched = false
+        s.hits = {}
+        model.hits = {}
+        show_rows()
+    end
+    if not q:match("^%s*$") then search(q) end
+    focus("query")
+    s.editing = true
+end)
+
+-- Tab: from names to what files hold, and back (while there is something written).
+on("tab_key", function()
+    if (text.query or "") ~= "" or s.editing then H.set_skind(s.skind == "name" and 1 or 0) end
+end)
+
+-- ── the list's groups, how many columns ──
+on("toggle_group", function()
+    s.group = not s.group
+    fact["group.on"] = s.group
+    s.first = 0
+    show_rows()
+end)
+
+on("set_mcols", function(n)
+    s.mcols = math.max(1, math.min(math.floor(n), 4))
+    if s.view == "columns" then s.show_columns() end
+end)
+
+-- ── columns, down the tree ──
+s.colcache = {}
+function s.show_columns()
+    local chain = {}
+    local p = s.path
+    while p and p ~= "" do
+        table.insert(chain, 1, p)
+        if p == "/" then break end
+        local d = dirname(p)
+        if d == p then break end
+        p = d
+    end
+    local start = math.max(1, #chain - s.mcols + 1)
+    s.colpaths = {}
+    for k = start, #chain do s.colpaths[#s.colpaths + 1] = chain[k] end
+    for k = 1, #s.colpaths - 1 do
+        local cp = s.colpaths[k]
+        if not s.colcache[cp] then send({ op = "list", path = cp, hidden = s.hidden, sort = s.sort, col = true }) end
+    end
+    s.render_columns()
+end
+
+function s.render_columns()
+    local out = {}
+    local paths = s.colpaths or {}
+    for k, cp in ipairs(paths) do
+        local items = (k == #paths) and s.items or s.colcache[cp] or {}
+        local nextp = paths[k + 1]
+        local ents = {}
+        for i, e in ipairs(items) do
+            if i > 300 then break end
+            local g = glyph(e.dir and "folder" or e.kind)
+            local on = (nextp ~= nil and e.path == nextp) or (k == #paths and s.picked[e.path] == true)
+            ents[#ents + 1] = { col = k - 1, at = i - 1, name = e.name, path = e.path, dir = e.dir == true, lo = g[1], hi = g[2], on = on }
+        end
+        out[k] = { path = cp, ents = ents }
+    end
+    model.mcol = out
+end
+
+local function col_entry(n)
+    local k, i = math.floor(n / 1000) + 1, n % 1000 + 1
+    local paths = s.colpaths or {}
+    local items = (k == #paths) and s.items or s.colcache[paths[k] or ""] or {}
+    return items[i], k == #paths, i
+end
+
+on("colent", function(n)
+    local e, last, i = col_entry(n)
+    if not e then return end
+    if e.dir then
+        go(e.path)
+    elseif last then
+        H.tile(i - 1)
+    else
+        s.picked = { [e.path] = true }
+        go(dirname(e.path))
+    end
+end)
+
+on("colent_menu", function(n)
+    local e, last, i = col_entry(n)
+    if not e then return end
+    if last then H.tile_menu(i - 1) end
+end)
+
+-- ── tabs ──
+local TAB_FIELDS = { "path", "items", "back", "fwd", "picked", "anchor", "chosen", "mode", "hits", "lastq", "first", "scrolls", "scroll_px",
+    "view", "sort", "crumbs", "parent", "finding", "skind", "filter", "scope", "top_score", "found_all", "found_more", "lastfind", "folder_first", "count_line", "tabname" }
+s.tabs = { {} }
+
+function s.tab_name()
+    local name = basename(s.path)
+    if s.path == s.home then name = tr("Home") elseif s.path == "/" then name = "/" elseif s.path == s.trash then name = tr("Trash") end
+    for _, p in ipairs(s.places or {}) do if p.path == s.path then name = p.name end end
+    s.tabname = name
+    text["folder.name"] = name
+    s.show_tabs()
+end
+
+function s.show_tabs()
+    local rows = {}
+    for k, t in ipairs(s.tabs) do
+        local name = k == s.tab and s.tabname or t.tabname
+        rows[k] = { name = name or "", here = k == s.tab, lo = GLYPHS.folder[1], hi = GLYPHS.folder[2] }
+    end
+    model.tabs = rows
+    fact["tab.on"] = s.tab - 1
+end
+
+local function tab_save()
+    local t = s.tabs[s.tab] or {}
+    for _, f in ipairs(TAB_FIELDS) do t[f] = s[f] end
+    t.query = text.query or ""
+    s.tabs[s.tab] = t
+end
+
+local function tab_load(k)
+    local t = s.tabs[k]
+    if not t then return end
+    stop_player()
+    for _, f in ipairs(TAB_FIELDS) do s[f] = t[f] end
+    s.tab = k
+    s.back = s.back or {}
+    s.fwd = s.fwd or {}
+    s.picked = s.picked or {}
+    s.scrolls = s.scrolls or {}
+    s.items = s.items or {}
+    s.hits = s.hits or {}
+    s.mode = s.mode or "browse"
+    s.view = s.view or "grid"
+    s.sort = s.sort or "name"
+    s.skind = s.skind or "name"
+    s.filter = s.filter or 1
+    s.scope = s.scope or "everywhere"
+    text.query = t.query or ""
+    fact["q.empty"] = (t.query or "") == ""
+    fact.mode = s.mode
+    fact.view = s.view
+    fact.sort = s.sort
+    fact.skind = s.skind
+    fact.filter = FILTERS[s.filter] or "all"
+    fact.scope = s.scope
+    fact.finding = s.finding == true
+    fact["fhint.on"] = s.finding == true
+    fact.searching = false
+    fact["can.back"] = #s.back > 0
+    fact["can.forward"] = #s.fwd > 0
+    s.show_tabs()
+    look_at(nil)
+    if s.mode == "search" then
+        local rows = {}
+        for i, h in ipairs(s.hits) do rows[i] = s.hit_row(i, h) end
+        model.hits = rows
+        fact["found.n"] = #s.hits
+        fact.searched = true
+        fact["found.gen"] = fact["found.gen"] + 1
+    elseif s.finding then
+        text["count.line"] = s.count_line or ""
+        show_rows()
+    else
+        -- Its folder again (it may have changed), where it was.
+        s.back_to = s.scroll_px
+        fact.loading = true
+        send({ op = "list", path = s.path, hidden = s.hidden, sort = s.sort, filter = s.pick_filter_now and s.pick_filter_now(), dirs_only = s.pick and s.pick.mode == "folder" or nil })
+    end
+end
+
+function s.tab_new(path)
+    tab_save()
+    local t = { path = path or s.path, back = {}, fwd = {}, picked = {}, items = {}, hits = {}, scrolls = {}, mode = "browse", view = s.view, sort = s.sort,
+        skind = "name", filter = 1, scope = "everywhere", first = 0, scroll_px = 0, finding = false, query = "", tabname = basename(path or s.path) }
+    table.insert(s.tabs, s.tab + 1, t)
+    s.tab = s.tab + 1
+    tab_load(s.tab)
+end
+
+on("tab_new", function() s.tab_new(s.path) end)
+
+on("tab_go", function(k)
+    k = math.floor(k) + 1
+    if k == s.tab or not s.tabs[k] then return end
+    tab_save()
+    tab_load(k)
+end)
+
+on("tab_step", function(d)
+    if #s.tabs < 2 then return end
+    tab_save()
+    tab_load((s.tab - 1 + math.floor(d)) % #s.tabs + 1)
+end)
+
+on("tab_close", function(k)
+    k = math.floor(k) + 1
+    if #s.tabs < 2 or not s.tabs[k] then return end
+    if k == s.tab then
+        table.remove(s.tabs, k)
+        tab_load(math.min(k, #s.tabs))
+    else
+        tab_save()
+        table.remove(s.tabs, k)
+        if k < s.tab then s.tab = s.tab - 1 end
+        s.show_tabs()
+    end
+end)
+
+on("sel_clear", function() choose(nil) end)
+
+-- ── the chips under the header, a dialog's buttons ──
+on("chip", function(code)
+    if code == 0 then H.toggle_hidden()
+    elseif code == 1 then H.set_sort()
+    elseif code == 2 then H.toggle_group()
+    elseif code >= 30 then H.set_filter(code - 30)
+    elseif code >= 20 then H.set_scope(code - 20)
+    elseif code >= 10 then H.set_filter(code - 10)
+    end
+end)
+
+on("dlg", function(code)
+    if code == 1 then H.ask_cancel()
+    elseif code == 2 then H.answered()
+    elseif code == 10 or code == 11 then H.settings_act(code - 10)
+    elseif code == 12 then fact["settings.open"] = false
+    elseif code >= 20 and code <= 23 then H.resolve(code - 20)
+    elseif code == 30 then H.ow_cancel()
+    elseif code == 31 then H.ow_go()
+    elseif code == 40 then H.pr_close()
+    end
+end)
