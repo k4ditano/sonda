@@ -1101,6 +1101,9 @@ local function menu_rows(on_item)
             add(17, "Undo", "Ctrl+Z")
             if not picking then add(16, "Open a terminal here") end
             add(15, "Properties", "Alt+Enter")
+            add(20, "Tiles", nil, false, true)
+            add(21, "List")
+            add(22, "Columns")
         end
     end
     return rows
@@ -1205,6 +1208,8 @@ on("act", function(k)
         send({ op = "undo" })
     elseif k == 18 then
         if entry and entry.dir then s.tab_new(entry.path) end
+    elseif k >= 20 and k <= 22 then
+        H.set_view(k - 20)
     end
 end)
 
@@ -1624,7 +1629,9 @@ function s.show_props(m)
     fact["pr.mine"] = m.mine == true
     fact["pr.mode"] = m.mode or 0
     fact["pr.used"] = m.used or 0
-    model.pricon = { { icon = s.thumbs[m.path] or m.icon or "text-x-generic" } }
+    local g = glyph(m.dir and "folder" or m.kind)
+    fact["pr.lo"] = g[1]
+    fact["pr.hi"] = g[2]
     fact["pr.open"] = true
 end
 

@@ -171,6 +171,8 @@ scene Sonda {
     fact pr.mode = 0
     fact pr.used = 0
     fact pr.link = false
+    fact pr.lo = 0
+    fact pr.hi = 0
     fact here.read = false               // the folder shown is read already (or is inside one)
     fact sys.used = 0                    // how full the system's disk is
     fact tab.on = 0                      // the tab in front
@@ -549,17 +551,21 @@ scene Sonda {
     }
 
     // The right side of the header: the search, how it is shown, more.
+    // Narrow (a window in a tiling layout): the search takes the title's place,
+    // and narrower still, the views go to the menu.
+    let narrow = W - side < 760
+    let tiny = W < 600
     let menub = W - 16 - 36
-    let vx = menub - 12 - 102
-    let sw = clamp(W - side - 132 - 220 - (W - vx) - 12, 200, 340)
-    let sx0 = vx - 12 - sw
+    let vx = if(tiny, menub, menub - 12 - 102)
     let tx0 = side + 132                 // the title starts
+    let sw = if(narrow, vx - 12 - tx0, clamp(W - side - 132 - 220 - (W - vx) - 12, 200, 340))
+    let sx0 = vx - 12 - sw
     let tw = max(sx0 - tx0 - 16, 40)
 
     // The crumbs (each a place to go back to), and the folder's name under them.
     // A press on them (or Ctrl+L) turns them into the whole path, to write another.
     group {
-        show: not addr.on
+        show: not addr.on and not narrow
         zone box crumbbg { from: tx0 - 6, 52; size: tw + 6, 48; corner: Rs; cursor: text; label: "Location" }
         on press crumbbg { emit addr_open }
         clip box { from: tx0, 50; size: tw, 52 }
@@ -580,7 +586,7 @@ scene Sonda {
     // The location bar: where the crumbs were. Enter goes, Tab finishes a
     // folder's name, Esc or a press elsewhere leaves it.
     group {
-        show: addr.on
+        show: addr.on and not narrow
         box { from: tx0 - 6, 58; size: tw + 6, 38; corner: Rs + 10; color: tile.c }
         box { from: tx0 - 6, 58; size: tw + 6, 38; corner: Rs + 10; stroke: 1; color: acc; opacity: 60% }
         input location { at: tx0 + 10, 77 - 8.45; width: tw - 24; size: 13; family: "JetBrains Mono"; color: ink; placeholder: "A folder: ~/Documents, /mnt/disk…"; label: "Location" }
@@ -632,6 +638,7 @@ scene Sonda {
 
     // Tiles, a list, or columns.
     group {
+        show: not tiny
         box { from: vx, 58; size: 102, 38; corner: Rs; color: tile.c }
         box { from: vx, 58; size: 102, 38; corner: Rs; stroke: 1; color: ink; opacity: 9% }
         prop vk = 0 ~quick
@@ -727,6 +734,8 @@ scene Sonda {
     let tile.w = 146
     let tile.h = if(view == grid and not finding, 178, 38)
     let cols.now = if(view == grid, max(floor((mw + 12) / tile.w), 1), 1)
+    // The tiles in the middle of what is left over.
+    let gridx = max(floor((mw + 12 - cols * tile.w) / 2), 0)
     on change cols.now { emit set_cols(cols.now) }
     on change view { emit set_cols(cols.now) }
     // How many columns fit, going down a tree.
@@ -795,7 +804,7 @@ scene Sonda {
                     for c in r.cells {
                         group {
                             let lst = view != grid or finding
-                            let tx = if(lst, 0, mod(c.at, cols) * tile.w)
+                            let tx = if(lst, 0, gridx + mod(c.at, cols) * tile.w)
                             let tw2 = if(lst, mw, tile.w - 12)
                             let th2 = tile.h - if(lst, 4, 6)
                             prop on = 0 ~quick
@@ -1137,8 +1146,8 @@ scene Sonda {
         box { from: ix, iy; size: iw, 48; corner: 24; stroke: 1; color: ink; opacity: 11% }
         measure seln
         text "{chosen.count, 0}" { at: ix + 22, iy + 24; anchor: left center; size: 22; family: "Newsreader"; color: ink; measure: seln }
-        text "chosen" { at: ix + 30 + seln.width, iy + 25; anchor: left center; size: 13.5; weight: 600; family: "Manrope"; color: ink }
-        text sel.size { at: ix + 96 + seln.width, iy + 25; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; show: iw >= 560 }
+        text "chosen" { at: ix + 30 + seln.width, iy + 25; anchor: left center; size: 13.5; weight: 600; family: "Manrope"; color: ink; show: iw >= 520 }
+        text sel.size { at: ix + 96 + seln.width, iy + 25; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; show: iw >= 680 }
         component IslBtn(k: number, x: number, w: number, name: text, danger: bool) {
             group {
                 zone box ib { from: x, iy + 7; size: w, 34; corner: 17; cursor: pointer; label: name }
@@ -1147,12 +1156,15 @@ scene Sonda {
                 on press ib { emit act(k) }
             }
         }
-        let bx0 = ix + iw - 46 - 4 * 100 - 96
-        IslBtn(3, bx0, 92, "Copy", false)
-        IslBtn(4, bx0 + 96, 92, "Cut", false)
-        IslBtn(13, bx0 + 192, 108, "Compress", false) { show: iw >= 560 }
-        box { from: bx0 + 306, iy + 14; size: 1, 20; color: ink; opacity: 12% }
-        IslBtn(9, bx0 + 314, 104, "Trash", true)
+        // From the right: the trash, a line, compress (if there is room), cut, copy.
+        let btr = ix + iw - 46 - 104
+        let cmpw = if(iw >= 600, 112, 0)
+        let bcm = btr - 12 - cmpw
+        IslBtn(9, btr, 104, "Trash", true)
+        box { from: btr - 6, iy + 14; size: 1, 20; color: ink; opacity: 12% }
+        IslBtn(13, bcm, 108, "Compress", false) { show: cmpw > 0 }
+        IslBtn(4, bcm - 92, 88, "Cut", false)
+        IslBtn(3, bcm - 184, 88, "Copy", false) { show: iw >= 440 }
         zone box selx { at: ix + iw - 26, iy + 24; size: 32, 32; corner: 16; cursor: pointer; label: "Choose none" }
         ellipse { at: ix + iw - 26, iy + 24; radius: 15; color: ink; opacity: 8% + 8% * selx.hover }
         path { at: ix + iw - 26, iy + 24; stroke: 1.6; color: dim; move -4, -4; line 4, 4 }
@@ -1427,9 +1439,9 @@ scene Sonda {
         let qy = max(H / 2 - qh / 2, 12) + 10 * (1 - prp)
         Card(qx, qy, 540, qh)
         zone box prcard { from: qx, qy; size: 540, qh; corner: R; label: "{pr.name}"; role: region }
-        for i in pricon {
-            image i.icon { at: qx + 24, qy + 24; size: 56, 56 }
-        }
+        box { from: qx + 24, qy + 24; size: 56, 56; corner: Rs; color: tile.c }
+        box { from: qx + 24, qy + 24; size: 56, 56; corner: Rs; stroke: 1; color: ink; opacity: 8% }
+        shader glyph { at: qx + 34.5, qy + 34.5; size: 35, 35; values: pr.lo, pr.hi, 7, 5, gr, 85%, 12%; colors: ink, ink }
         text pr.name { at: qx + 96, qy + 42; anchor: left center; size: 22; family: "Newsreader"; color: ink; width: 420; lines: 1; selectable: true }
         text pr.kind { at: qx + 96, qy + 68; anchor: left center; size: 11; family: "JetBrains Mono"; color: faint; width: 420; lines: 1 }
         component PrRow(k: number, name: text, value: text) {

@@ -38,6 +38,24 @@ words, in any language, and it digs it up. Everything runs on your computer.
 
 # What's new
 
+- **A new window**: in the look of the desktop it is on, and following it.
+  Under Calima it takes the Taller's accent, surface, ink and corners, and
+  changes when you change them. Its letters are Newsreader, Manrope and
+  JetBrains Mono (in the binary, SIL OFL), and its icons are grains: what a
+  file is, how big it is, how full a disk is, how far a copy has gone.
+- **Tabs**: Ctrl+T, Ctrl+W, Ctrl+PageUp/PageDown; a folder in a new tab from
+  its menu. Each tab keeps its folder, its history, its search and its view.
+- **Three views**: tiles; a list with its columns (name, modified, size in
+  grains, kind) and its groups by day or by kind; and columns going down the
+  tree, as in Finder.
+- **Looking for a name**: writing on a folder looks for a name there and in
+  what is inside (words in any order, accents and case not counting, or
+  `*.pdf`), and says in which subfolder each one is. **Tab** turns it into
+  the search by what files hold.
+- **An island for what is chosen** (how many, what they take, copy, cut,
+  compress, trash), an islet for each long job, and a dune of grains for an
+  empty folder. Another folder starts at its top, and one you go back to
+  opens where you were.
 - **A location bar**: Ctrl+L, or a press beside the crumbs, turns them into
   the whole path, to write another one. `~` is your home, a relative path goes
   from the folder shown, Tab finishes a folder's name, and a file's path opens
@@ -226,7 +244,8 @@ To open folders with it: `xdg-mime default sonda.desktop inode/directory`.
 | | |
 | --- | --- |
 | `Super+E` · `Super+S` | Sonda · Sonda with the search ready |
-| typing on a folder | starts a search |
+| typing on a folder | looks for a name here and inside · `Tab`: by what files hold |
+| `Ctrl+T` · `Ctrl+W` · `Ctrl+PgUp` `Ctrl+PgDn` | new tab · close it · the one before, the next |
 | `↑ ↓ ← →` · `Enter` | move · open (a folder goes in) |
 | `Alt+←` `Alt+→` `Alt+↑` · `Backspace` | back, forward, up · back |
 | `Ctrl+C` `Ctrl+X` `Ctrl+V` | copy, cut, paste (other programs paste them as files) |
@@ -234,7 +253,7 @@ To open folders with it: `xdg-mime default sonda.desktop inode/directory`.
 | `Ctrl+L` | the location bar: write a path (`~` is home, `Tab` finishes a folder's name) |
 | `Ctrl+H` · `Space` · `Ctrl+A` | hidden files · the look on and off · all |
 | `Ctrl+Z` · `Alt+Enter` | undo · properties |
-| `Esc` | leaves the search (picking for a program: cancels) |
+| `Esc` | leaves the search, or lets go of what is chosen (picking for a program: cancels) |
 
 # From the terminal
 

@@ -30,7 +30,11 @@ de ordenar los resultados sigue a [DigUp](https://github.com/ARahim3/DigUp) (MIT
 ## Qué hace
 
 - **Gestor de archivos**:
-  - tus lugares, y las carpetas en cuadrícula con miniaturas reales (fotos, la primera página de un PDF, un fotograma de un vídeo) o en lista;
+  - con el aspecto del escritorio en el que está: en Calima toma el acento, la superficie, la tinta y las esquinas del Taller, y cambia cuando los cambias; sus letras son Newsreader, Manrope y JetBrains Mono, y sus iconos, granos (qué es un archivo, cuánto ocupa, cuánto queda en un disco);
+  - **pestañas** (Ctrl+T, Ctrl+W), cada una con su carpeta, su historial, su búsqueda y su vista;
+  - tus lugares, tus carpetas fijadas y tus discos, y las carpetas en cuadrícula con miniaturas reales (fotos, la primera página de un PDF, un fotograma de un vídeo), en lista con sus columnas y en grupos por día o por tipo, o **en columnas** bajando por el árbol;
+  - escribir sobre una carpeta **busca un nombre** en ella y en lo que hay dentro (palabras en cualquier orden, sin tildes ni mayúsculas, o `*.pdf`), y dice en qué subcarpeta está cada uno; **Tab** pasa a buscar por lo que contienen;
+  - una isla para lo elegido (cuántos, cuánto ocupan, copiar, cortar, comprimir, papelera) y un islote por cada trabajo largo;
   - atrás, adelante, arriba, migas de pan y una barra de ubicación para escribir la ruta (Ctrl+L, o un clic junto a las migas): `~` es tu carpeta personal, Tab completa el nombre de una carpeta, y la ruta de un archivo abre su carpeta con él elegido;
   - copiar, cortar, pegar, renombrar, carpeta nueva, papelera y restaurar;
   - arrastrar archivos a cualquier programa, y soltarlos desde cualquier programa sobre la carpeta, una carpeta de dentro, un lugar, una miga o una unidad;
@@ -74,7 +78,8 @@ Para abrir las carpetas con ella: `xdg-mime default sonda.desktop inode/director
 | | |
 | --- | --- |
 | `Super+E` · `Super+S` | Sonda · Sonda con la búsqueda lista |
-| escribir sobre una carpeta | empieza una búsqueda |
+| escribir sobre una carpeta | busca un nombre aquí y dentro · `Tab`: por lo que contienen |
+| `Ctrl+T` · `Ctrl+W` · `Ctrl+RePág` `Ctrl+AvPág` | pestaña nueva · cerrarla · la anterior, la siguiente |
 | flechas · `Intro` | moverse · abrir |
 | `Alt+←` `Alt+→` `Alt+↑` · `Retroceso` | atrás, adelante, arriba · atrás |
 | `Ctrl+C` `Ctrl+X` `Ctrl+V` | copiar, cortar, pegar |
@@ -82,7 +87,7 @@ Para abrir las carpetas con ella: `xdg-mime default sonda.desktop inode/director
 | `Ctrl+L` | la barra de ubicación: escribe una ruta (`Tab` completa) |
 | `Ctrl+H` · `Espacio` · `Ctrl+A` | ocultos · vista previa · todo |
 | `Ctrl+Z` · `Alt+Intro` | deshacer · propiedades |
-| `Esc` | sale de la búsqueda |
+| `Esc` | sale de la búsqueda, o suelta lo elegido |
 
 ## Instalar
 
