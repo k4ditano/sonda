@@ -310,7 +310,10 @@ local function play_here(e, at)
     stop_player()
     local socket = text["win.socket"]
     if not socket or socket == "" then return false end
-    local args = { "-loglevel", "error", "-noborder", "-autoexit", "-window_title", "Sonda", "-x", "640", "-y", "400" }
+    -- As big as its box in the look: bigger, it would come out cut at it.
+    local w = math.floor(tonumber(fact["pl.w"]) or 264)
+    local h = math.floor(tonumber(fact["pl.h"]) or 170)
+    local args = { "-loglevel", "error", "-noborder", "-autoexit", "-window_title", "Sonda", "-x", tostring(w), "-y", tostring(h) }
     if at and at > 0 then
         args[#args + 1] = "-ss"
         args[#args + 1] = tostring(math.max(at - 1, 0))
@@ -682,7 +685,7 @@ local function on_line(line)
         fact["can.up"] = m.parent ~= nil and m.parent ~= "" and m.path ~= "/"
         s.parent = m.parent
         local crumbs = {}
-        for i, c in ipairs(m.crumbs or {}) do crumbs[i] = { name = c.name == "/" and "" or c.name, path = c.path, at = i - 1 } end
+        for i, c in ipairs(m.crumbs or {}) do crumbs[i] = { name = c.name == "/" and "" or (c.path == s.home and "~" or c.name), path = c.path, at = i - 1 } end
         s.crumbs = m.crumbs or {}
         model.crumbs = crumbs
         text["folder.name"] = basename(m.path)

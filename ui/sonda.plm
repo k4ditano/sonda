@@ -82,6 +82,11 @@ scene Sonda {
     follow pv = if(preview.on and W >= 1000, 1, 0)
     let pane.full = if(W < 1150, 280, 300)
     let pane = pane.full * pv            // the look's width, as it comes and goes
+    // The player's box in the look: the logic starts it that big (a player
+    // bigger than its box comes out cut at it, not made smaller).
+    fact pl.w = 264
+    fact pl.h = 170
+    on change pane.full { pl.w = pane.full - 36 }
     let mx = side + 16                   // the middle starts
     let mw = W - side - pane - 32        // and is this wide
     let my = 160                         // under the header and its line
@@ -505,10 +510,10 @@ scene Sonda {
         clip box { from: side + 8, 6; size: W - side - 16, 40 }
         row tabrow { at: side + 16, 29; anchor: left middle; gap: 8
             for t in tabs {
-                row tb { padding: 7; corner: Rs; gap: 8; cursor: pointer; fill: mix(bg, ink, if(t.here, 0.1, 0.035))
+                row tb { padding: 7; corner: Rs; gap: 0; cursor: pointer; fill: mix(bg, ink, if(t.here, 0.1, 0.035))
                     text t.name { size: 13.5; weight: if(t.here, 600, 500); family: "Manrope"; color: if(t.here, ink, dim) }
                     row tx { padding: 1; corner: 6; cursor: pointer; show: tabs.count > 1
-                        text "×" { size: 13; family: "Manrope"; color: faint }
+                        text "   ×" { size: 13; family: "Manrope"; color: faint }
                         on press tx { emit tab_close(t.index) }
                     }
                     on press tb { emit tab_go(t.index) }
@@ -745,7 +750,7 @@ scene Sonda {
     // And once the logic is there: a window that opens at its final width (a
     // picker, floating at 1280) never changes it, and the logic's guess stayed.
     fact ui.ready = false
-    on change ui.ready { emit set_cols(cols.now); emit set_mcols(mcols.now) }
+    on change ui.ready { emit set_cols(cols.now); emit set_mcols(mcols.now); pl.w = pane.full - 36 }
 
     // Dropped from another program onto the empty middle: into this folder.
     zone box midzone { from: mx, my; size: mw, mh; label: "The folder"; role: region }
@@ -1566,6 +1571,9 @@ scene Sonda {
     on key Ctrl+Page_Down { emit tab_step(1) }
     on key Ctrl+Page_Up { emit tab_step(-1) }
     on key Alt+Left { emit nav(0) }
+    // The mouse's side buttons.
+    on key XF86Back { emit nav(0) }
+    on key XF86Forward { emit nav(1) }
     on key Alt+Right { emit nav(1) }
     on key Alt+Up { emit nav(2) }
     on key F5 { emit nav(3) }
