@@ -97,7 +97,7 @@ sh install.sh
 ```
 
 Funciona en cualquier compositor Wayland (Hyprland, niri, Sway, KDE): necesita
-[pleamar](https://github.com/k4ditano/pleamar), porque su ventana es una escena.
+[pleamar](https://github.com/k4ditano/pleamar) 0.5.1 o más nuevo, porque su ventana es una escena.
 Si además tienes `pleamar-wm` instalado (no hace falta que sea tu sesión), los
 vídeos y las grabaciones se reproducen dentro de la vista previa; solo con
 `pleamar`, «Reproducir ahí» los abre en tu reproductor. `SONDA_PLEAMAR` dice

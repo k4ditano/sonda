@@ -1,6 +1,6 @@
 [package]
 name = "sonda"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Search your computer by what is in your files, and walk it: a file manager for pleamar-wm, with EmbeddingGemma 2 on llama.cpp"
 license = "MIT"

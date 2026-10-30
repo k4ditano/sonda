@@ -144,7 +144,7 @@ Windows and Linux first.
 
 # Install
 
-It needs [pleamar] (its window is a pleamar scene), ffmpeg, poppler
+It needs [pleamar] 0.5.1 or newer (its window is a pleamar scene), ffmpeg, poppler
 (`pdftotext`, `pdftoppm`), `gio` (the trash), `wl-copy`, `bsdtar` (libarchive:
 packing), `udisksctl` (drives), and for the graphics card the Vulkan driver and
 `glslc` to build.
