@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use image::RgbImage;
 
 unsafe extern "C" {
-    fn sonda_open(text: *const c_char, mmproj: *const c_char, gpu: c_int, threads: c_int, verbose: c_int) -> *mut c_void;
+    fn sonda_open(text: *const c_char, mmproj: *const c_char, gpu: c_int, threads: c_int, verbose: c_int, tokens: c_int) -> *mut c_void;
     fn sonda_close(e: *mut c_void);
     fn sonda_dim(e: *mut c_void) -> c_int;
     fn sonda_embed_texts(e: *mut c_void, texts: *const *const c_char, count: c_int, out: *mut f32) -> c_int;
@@ -37,6 +37,7 @@ pub fn document(title: &str, text: &str) -> String {
 pub struct Embedder {
     handle: *mut c_void,
     pub media: bool,
+    gpu: bool,
 }
 
 // One thread at a time: the daemon keeps it behind a lock.
@@ -48,8 +49,34 @@ fn error() -> anyhow::Error {
 }
 
 impl Embedder {
-    /// `media`: with the picture and sound encoders (about 1 GB), or words only.
+    /// `media`: with the picture and sound encoders (about 1 GB of the card),
+    /// or words only (about 250 MB). A search's words-only model reserves room
+    /// for a query; `open_reader` for a whole piece of text.
     pub fn open(media: bool, gpu: bool) -> Result<Embedder> {
+        Embedder::open_sized(media, gpu, 0)
+    }
+
+    /// For reading files: the words alone, with room for a whole piece of text
+    /// (1800 characters, ~700 tokens; 1024 halves the card's working buffer
+    /// against 2048), or with the picture and sound encoders, which need 2048.
+    pub fn open_reader(media: bool, gpu: bool) -> Result<Embedder> {
+        Embedder::open_sized(media, gpu, if media { 2048 } else { 1024 })
+    }
+
+    /// On the card if asked and it fits; if the card has no room left (a game,
+    /// a video being edited, another model), on the processor instead of not
+    /// at all: slower, but Sonda goes on reading and searching.
+    fn open_sized(media: bool, gpu: bool, tokens: i32) -> Result<Embedder> {
+        match Embedder::open_on(media, gpu, tokens) {
+            Err(e) if gpu => {
+                crate::index::log(&format!("the graphics card could not take the model ({e}): on the processor"));
+                Embedder::open_on(media, false, tokens)
+            }
+            r => r,
+        }
+    }
+
+    fn open_on(media: bool, gpu: bool, tokens: i32) -> Result<Embedder> {
         let dir = crate::paths::models();
         let text = dir.join(crate::paths::TEXT_MODEL);
         let mmproj = dir.join(crate::paths::MEDIA_MODEL);
@@ -63,7 +90,7 @@ impl Embedder {
         let m = CString::new(mmproj.to_string_lossy().as_bytes())?;
         let threads = std::thread::available_parallelism().map(|n| n.get().min(8)).unwrap_or(4) as c_int;
         let verbose = std::env::var_os("SONDA_VERBOSE").is_some() as c_int;
-        let handle = unsafe { sonda_open(t.as_ptr(), if media { m.as_ptr() } else { std::ptr::null() }, gpu as c_int, threads, verbose) };
+        let handle = unsafe { sonda_open(t.as_ptr(), if media { m.as_ptr() } else { std::ptr::null() }, gpu as c_int, threads, verbose, tokens as c_int) };
         if handle.is_null() {
             return Err(error());
         }
@@ -72,7 +99,12 @@ impl Embedder {
             unsafe { sonda_close(handle) };
             return Err(anyhow!("the model makes {dim} numbers, not {DIM}"));
         }
-        Ok(Embedder { handle, media })
+        Ok(Embedder { handle, media, gpu })
+    }
+
+    /// Whether it went to the graphics card (it may have fallen back to the processor).
+    pub fn on_gpu(&self) -> bool {
+        self.gpu && Embedder::has_gpu()
     }
 
     pub fn has_gpu() -> bool {

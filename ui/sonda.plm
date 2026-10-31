@@ -127,6 +127,7 @@ scene Sonda {
     fact read.rate = 0
     fact read.on = false                 // reading right now
     fact read.paused = false
+    fact read.semantic = true            // search by meaning (the model), or words and names only
     fact read.vectors = 0
     fact read.reachable = true
     // The look.
@@ -352,6 +353,7 @@ scene Sonda {
     fact grid.at = 0                     // the logic: back where it was in a folder gone back to…
     fact grid.back = 0                   // …now
     event settings_open ->
+    event semantic_toggle ->            // search by meaning, on or off (Settings)
     event settings_act ->               // 0 add here · 1 add here as code · 100+k drop folder k · 200+k drop code folder k · 9 done
     event drive ->                       // a drive pressed: index
     event eject ->                       // its eject button
@@ -1297,7 +1299,7 @@ scene Sonda {
         on press setveil { settings.open = false }
         let sgx = W / 2 - 290
         let gy = max(H / 2 - 300, 20) + 10 * (1 - setp)
-        let gh = 156 + readf.count * 34 + codef.count * 34 + 124
+        let gh = 156 + readf.count * 34 + codef.count * 34 + 124 + 76
         Card(sgx, gy, 580, gh)
         zone box setcard { from: sgx, gy; size: 580, gh; corner: R; label: "Folders" }
         text "What Sonda reads" { at: sgx + 26, gy + 36; anchor: left center; size: 23; family: "Newsreader"; color: ink }
@@ -1347,6 +1349,17 @@ scene Sonda {
                 }
             }
         }
+        // Search by meaning: the model on the card, or words and names only.
+        prop semk = 1 ~calm
+        follow semk = if(read.semantic, 1, 0)
+        let sy = gy + gh - 56 - 76
+        box { from: sgx + 20, sy; size: 540, 64; corner: Rs; color: ink; opacity: 5% }
+        text "Search by meaning" { at: sgx + 34, sy + 20; anchor: left center; size: 13; weight: 650; family: "Manrope"; color: ink }
+        text "It finds what you mean, in other words, in pictures and in sound. While it reads it uses about 300 MB of the graphics card, 1 GB with pictures. Off: words and names only." { at: sgx + 34, sy + 42; anchor: left center; size: 11; family: "Manrope"; color: dim; width: 440; lines: 2 }
+        zone box semz { from: sgx + 20, sy; size: 540, 64; corner: Rs; cursor: pointer; label: "Search by meaning"; role: toggle; checked: read.semantic }
+        on press semz { emit dlg(13) }
+        box { from: sgx + 498, sy + 20; size: 46, 24; corner: 12; color: mix(ink, acc, semk); opacity: 18% + 70% * semk }
+        ellipse { at: sgx + 510 + 22 * semk, sy + 32; radius: 9; color: if(read.semantic, on_acc, ink); opacity: 90% }
         let by2 = gy + gh - 56
         Btn(sgx + 20, by2, 180, "+ This folder", true, 10) { show: not here.read }
         Btn(sgx + 210, by2, 200, "+ This folder as code", false, 11) { show: not here.read }
@@ -1698,6 +1711,10 @@ scene Sonda {
         "Done" = "Listo"
         "Now it reads" = "Ahora lee"
         "It no longer reads" = "Ya no lee"
+        "Search by meaning" = "Buscar por significado"
+        "It finds what you mean, in other words, in pictures and in sound. While it reads it uses about 300 MB of the graphics card, 1 GB with pictures. Off: words and names only." = "Encuentra lo que quieres decir, con otras palabras, en imágenes y en sonido. Mientras lee usa unos 300 MB de la tarjeta gráfica, 1 GB con imágenes. Apagado: solo palabras y nombres."
+        "Search by meaning on" = "Búsqueda por significado activada"
+        "Words and names only" = "Solo palabras y nombres"
         "folder" = "carpeta"
         "folders" = "carpetas"
         "file" = "archivo"

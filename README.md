@@ -63,6 +63,15 @@ words, in any language, and it digs it up. Everything runs on your computer.
 - **The reader waits for your videos**: while a browser or a video player is
   playing, it stops and lets go of the graphics card, so the video never
   stutters for it.
+- **Light on the graphics card**: reading code and text opens the words alone
+  (about 300 MB); the picture and sound encoders (about 1 GB in all) open only
+  when a picture, a sound or a video comes, and go a minute after the last one.
+  Nothing stays on the card once there is nothing to read. With the card full,
+  the model runs on the processor instead of not at all.
+- **Search by meaning, or not**: Settings › *Search by meaning*, or
+  `sonda semantic off`, and no model is ever opened: a search finds the words
+  themselves and names. Turned on again, what was read meanwhile is read again
+  for its meaning.
 - **Narrow windows**: under 760 px the sidebar keeps only its icons, and the
   toolbar, the filters and the dialogs give up what does not fit.
 
@@ -193,7 +202,9 @@ profiles; `SONDA_PLEAMAR=/path/to/pleamar` says which one to use.
 # What it reads
 
 The folders in `~/.config/sonda/config.json` (your Desktop, Documents,
-Downloads, Pictures, Videos and Music at first; your Projects as code):
+Downloads, Pictures, Videos and Music at first; your Projects as code). A git
+worktree inside them (`git worktree add`) is left out: it is a second copy of a
+project read already. A submodule is read, being its own code.
 
 | | |
 | --- | --- |
@@ -262,6 +273,7 @@ sonda search a receipt from the supermarket
 sonda search code: where the window manager docks a window
 sonda status          # how the reading goes
 sonda pause · resume  # stop reading for a while
+sonda semantic off    # words and names only, no model on the graphics card (on: by meaning again)
 ```
 
 # How it works

@@ -123,7 +123,10 @@ fn answer(req: &Value, shared: &Arc<Shared>, asker: &Arc<Mutex<Asker>>, db: &Sto
             if text.is_empty() {
                 return Ok(json!({ "ok": true, "id": id, "hits": [], "q": raw }));
             }
-            let vector = {
+            let semantic = shared.config.lock().unwrap().semantic;
+            let vector = if !semantic {
+                None
+            } else {
                 let mut a = asker.lock().unwrap();
                 if a.model.is_none() {
                     let gpu = shared.config.lock().unwrap().gpu;
@@ -142,6 +145,9 @@ fn answer(req: &Value, shared: &Arc<Shared>, asker: &Arc<Mutex<Asker>>, db: &Sto
         }
         "warm" => {
             // A window opened: the words-only model, ready before the first key.
+            if !shared.config.lock().unwrap().semantic {
+                return Ok(json!({ "ok": true, "id": id }));
+            }
             let mut a = asker.lock().unwrap();
             if a.model.is_none() {
                 let gpu = shared.config.lock().unwrap().gpu;
@@ -176,6 +182,22 @@ fn answer(req: &Value, shared: &Arc<Shared>, asker: &Arc<Mutex<Asker>>, db: &Sto
             c.save();
             shared.resync.store(true, Ordering::Relaxed);
             Ok(json!({ "ok": true, "id": id, "config": *c }))
+        }
+        "semantic" => {
+            // Search by meaning, on or off (`sonda semantic on|off`, Settings).
+            let on = req["on"].as_bool().unwrap_or(true);
+            let mut c = shared.config.lock().unwrap();
+            let was = c.semantic;
+            c.semantic = on;
+            c.save();
+            let mut again = 0;
+            if !on {
+                asker.lock().unwrap().model = None;
+            } else if !was {
+                again = db.read_again_without_vectors()?;
+            }
+            crate::index::log(&format!("search by meaning {}{}", if on { "on" } else { "off" }, if again > 0 { format!(": {again} files to read again for their vectors") } else { String::new() }));
+            Ok(json!({ "ok": true, "id": id, "semantic": on, "again": again, "config": *c }))
         }
         "resync" => {
             shared.resync.store(true, Ordering::Relaxed);

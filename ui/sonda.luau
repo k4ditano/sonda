@@ -896,6 +896,7 @@ local function on_line(line)
         local st = m.status or {}
         if m.config then
             cfg = m.config
+            fact["read.semantic"] = cfg.semantic ~= false
             if fact["settings.open"] and s.show_folders then s.show_folders() end
         end
         fact["read.done"] = st.done or 0
@@ -1353,6 +1354,15 @@ on("settings_act", function(k)
     cfg.folders, cfg.code_folders = f, c
     show_folders()
     send({ op = "folders", folders = f, code_folders = c })
+end)
+
+-- Search by meaning, on or off: the daemon keeps it in its config.json.
+on("semantic_toggle", function()
+    local on_now = not fact["read.semantic"]
+    fact["read.semantic"] = on_now
+    cfg.semantic = on_now
+    send({ op = "semantic", on = on_now })
+    toast(tr(on_now and "Search by meaning on" or "Words and names only"))
 end)
 
 on("clear_search", clear_search)
@@ -2110,6 +2120,7 @@ on("dlg", function(code)
     elseif code == 2 then H.answered()
     elseif code == 10 or code == 11 then H.settings_act(code - 10)
     elseif code == 12 then fact["settings.open"] = false
+    elseif code == 13 then H.semantic_toggle()
     elseif code >= 20 and code <= 23 then H.resolve(code - 20)
     elseif code == 30 then H.ow_cancel()
     elseif code == 31 then H.ow_go()

@@ -123,7 +123,7 @@ static void start_backends(void) {
     llama_backend_init();
 }
 
-void *sonda_open(const char *text_model, const char *mmproj, int gpu, int threads, int verbose) {
+void *sonda_open(const char *text_model, const char *mmproj, int gpu, int threads, int verbose, int tokens) {
     quiet = !verbose;
     llama_log_set(on_log, NULL);
     mtmd_log_set(on_log, NULL);
@@ -133,6 +133,11 @@ void *sonda_open(const char *text_model, const char *mmproj, int gpu, int thread
     pthread_once(&once, start_backends);
     struct llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = gpu ? 999 : 0;
+    // On the processor means on the processor: with no layers on the card
+    // llama.cpp still sends the work to it (op_offload) and keeps its buffers
+    // there, so a full card still failed. No devices at all.
+    static ggml_backend_dev_t no_devices[] = { NULL };
+    if (!gpu) mp.devices = no_devices;
     struct llama_model *model = llama_model_load_from_file(text_model, mp);
     if (!model) {
         fail("cannot load %s", text_model);
@@ -140,8 +145,9 @@ void *sonda_open(const char *text_model, const char *mmproj, int gpu, int thread
     }
     // One input must fit one micro-batch: 2048 tokens, which also holds a
     // 1120-token picture or a 750-token half minute of sound. A query encoder
-    // reserves less.
-    int max_tokens = mmproj ? 2048 : 512;
+    // reserves less. `tokens`, when given, says it: the reader opens the words
+    // alone with room for a whole piece of text.
+    int max_tokens = tokens > 0 ? tokens : (mmproj ? 2048 : 512);
     struct llama_context_params cp = llama_context_default_params();
     cp.n_ctx = max_tokens;
     cp.n_batch = max_tokens;
@@ -154,6 +160,7 @@ void *sonda_open(const char *text_model, const char *mmproj, int gpu, int thread
         cp.n_threads = threads;
         cp.n_threads_batch = threads;
     }
+    if (!gpu) cp.op_offload = false;
     struct llama_context *ctx = llama_init_from_model(model, cp);
     if (!ctx) {
         llama_model_free(model);

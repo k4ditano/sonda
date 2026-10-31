@@ -16,6 +16,12 @@ pub struct Config {
     pub excluded: Vec<String>,
     /// The model on the graphics card (Vulkan), or on the processor.
     pub gpu: bool,
+    /// Search by meaning: each piece read gets its vector from the model, and a
+    /// search finds what means the same in other words, in pictures and in
+    /// sound. Off, no model is ever opened (no memory on the card, nothing to
+    /// download): a search finds the words themselves and names. Turned on
+    /// again, what was read meanwhile is read again for its vectors.
+    pub semantic: bool,
     /// Reading stopped until it is resumed.
     pub paused: bool,
     /// PDFs: pages past this are left out.
@@ -36,7 +42,7 @@ impl Default for Config {
         if let Some(d) = paths::user_dir("PROJECTS") {
             code_folders.push(d.to_string_lossy().into_owned());
         }
-        Config { folders, code_folders, excluded: Vec::new(), gpu: true, paused: false, max_pages: 400, max_minutes: 240.0 }
+        Config { folders, code_folders, excluded: Vec::new(), gpu: true, semantic: true, paused: false, max_pages: 400, max_minutes: 240.0 }
     }
 }
 

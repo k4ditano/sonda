@@ -185,6 +185,16 @@ impl Store {
         Ok(ids)
     }
 
+    /// Search by meaning back on: what was read while it was off has its
+    /// words but no vectors, so it is read again. How many.
+    pub fn read_again_without_vectors(&self) -> Result<usize> {
+        Ok(self.db.execute(
+            "UPDATE files SET status = 'pending' WHERE status = 'done'
+             AND NOT EXISTS (SELECT 1 FROM segments WHERE segments.file = files.id AND segments.vec IS NOT NULL)",
+            [],
+        )?)
+    }
+
     pub fn failed(&self, file: i64, why: &str) -> Result<()> {
         self.db.execute("UPDATE files SET status = 'error', error = ? WHERE id = ?", params![why, file])?;
         Ok(())

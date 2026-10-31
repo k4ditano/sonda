@@ -106,4 +106,11 @@ cuál usar si no lo encuentra.
 Lo que lee está en `~/.config/sonda/config.json`. Desde la terminal tienes
 `sonda search …`, `sonda status`, `sonda pause` y `sonda resume`.
 
+La búsqueda por significado usa un modelo en la tarjeta gráfica: unos 300 MB
+mientras lee código y texto, 1 GB cuando hay imágenes, sonido o vídeo, y nada
+cuando no tiene qué leer. Si no la quieres, Ajustes › *Buscar por significado*
+o `sonda semantic off`: no abre ningún modelo y busca por palabras y nombres.
+Los worktrees de git (`git worktree add`) no se leen: son una segunda copia de
+un proyecto que ya lee.
+
 Licencia MIT. Las contribuciones son bienvenidas, hechas con IA o sin ella: mira la [política de IA](AI_POLICY.md).

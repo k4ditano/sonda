@@ -50,6 +50,21 @@ fn mtime_of(m: &std::fs::Metadata) -> f64 {
     m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
 
+/// A git worktree: a second checkout of a repository that is read already
+/// (`git worktree add`), its `.git` a file pointing into the other's
+/// `.git/worktrees/`. Reading it again would read the same project twice, and
+/// copies like these come and go by the dozen. A submodule's `.git` is a file
+/// too, but it points into `.git/modules/`: that one is its own code, and read.
+pub fn is_worktree(dir: &Path) -> bool {
+    let git = dir.join(".git");
+    git.is_file() && std::fs::read_to_string(&git).is_ok_and(|t| t.trim_start().starts_with("gitdir:") && t.contains("/worktrees/"))
+}
+
+/// Whether a path is inside a worktree (see `is_worktree`), up to `/`.
+fn inside_worktree(path: &Path) -> bool {
+    path.ancestors().skip(1).any(is_worktree)
+}
+
 fn is_project(dir: &Path) -> bool {
     PROJECT_MARKERS.iter().any(|m| dir.join(m).exists())
 }
@@ -81,7 +96,7 @@ pub fn walk_main(config: &Config, mut found: impl FnMut(&Path, Kind, &std::fs::M
                     continue;
                 }
                 if ft.is_dir() {
-                    if !SKIP_FOLDERS.contains(&name.as_str()) && !name.ends_with(".noindex") {
+                    if !SKIP_FOLDERS.contains(&name.as_str()) && !name.ends_with(".noindex") && !is_worktree(&path) {
                         stack.push((path, project));
                     }
                 } else if ft.is_file() {
@@ -113,7 +128,7 @@ pub fn walk_code(config: &Config, mut found: impl FnMut(&Path, &std::fs::Metadat
             .follow_links(false)
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
-                !(e.file_type().is_some_and(|t| t.is_dir()) && SKIP_FOLDERS.contains(&name.as_ref()))
+                !(e.file_type().is_some_and(|t| t.is_dir()) && (SKIP_FOLDERS.contains(&name.as_ref()) || is_worktree(e.path())))
             })
             .build();
         for e in walker.flatten() {
@@ -200,7 +215,7 @@ fn root_of(config: &Config, path: &str) -> PathBuf {
 }
 
 /// Reads one file: its pieces, each with its vector, into the index.
-fn read_file(store: &mut Store, shared: &Shared, embedder: &Arc<Mutex<Option<Embedder>>>, row: &crate::store::FileRow) -> Result<()> {
+fn read_file(store: &mut Store, shared: &Shared, embedder: &Arc<Mutex<Models>>, row: &crate::store::FileRow) -> Result<()> {
     let path = PathBuf::from(&row.path);
     let config = shared.config.lock().unwrap().clone();
     let limits = Limits { max_pages: config.max_pages, max_seconds: config.max_minutes * 60.0 };
@@ -212,11 +227,14 @@ fn read_file(store: &mut Store, shared: &Shared, embedder: &Arc<Mutex<Option<Emb
             anyhow::bail!("stopping");
         }
         let Draft { mut piece, media } = d;
+        // Without search by meaning (`semantic: false`) a piece keeps its words for
+        // the word search, and no model is opened at all.
         let vec = match media {
+            _ if !config.semantic => None,
             Media::None => None,
-            Media::Text(t) => Some(with_model(embedder, |e| e.text(&t))?),
-            Media::Picture(img, budget) => Some(with_model(embedder, |e| e.picture(&img, budget))?),
-            Media::Sound(s) => Some(with_model(embedder, |e| e.sound(&s))?),
+            Media::Text(t) => Some(with_model(embedder, false, |e| e.text(&t))?),
+            Media::Picture(img, budget) => Some(with_model(embedder, true, |e| e.picture(&img, budget))?),
+            Media::Sound(s) => Some(with_model(embedder, true, |e| e.sound(&s))?),
         };
         piece.vec = vec;
         pieces.push(piece);
@@ -239,17 +257,71 @@ fn read_file(store: &mut Store, shared: &Shared, embedder: &Arc<Mutex<Option<Emb
     Ok(())
 }
 
-/// The model, opened the first time it is needed and kept while there is
-/// work; searches use their own (words only), so they never wait for it.
-fn with_model<T>(embedder: &Arc<Mutex<Option<Embedder>>>, f: impl FnOnce(&mut Embedder) -> Result<T>) -> Result<T> {
-    let mut guard = embedder.lock().unwrap();
-    if guard.is_none() {
-        let gpu = crate::config::Config::load().gpu;
-        let started = Instant::now();
-        *guard = Some(Embedder::open(true, gpu)?);
-        log(&format!("the model is open ({:.1} s, {})", started.elapsed().as_secs_f64(), if gpu && Embedder::has_gpu() { "on the graphics card" } else { "on the processor" }));
+/// The models the reader has open. Most of what changes is words —code, text,
+/// documents—, and the words alone take about a quarter of the card the
+/// picture and sound encoders take: those open only when a picture, a sound or
+/// a video comes, and go a minute after the last one. Searches use their own
+/// (words only), so they never wait for these.
+pub struct Models {
+    words: Option<Embedder>,
+    media: Option<Embedder>,
+    media_used: Instant,
+}
+
+/// How long the picture and sound encoders stay once nothing needs them.
+const MEDIA_KEPT: Duration = Duration::from_secs(60);
+
+impl Models {
+    pub fn new() -> Models {
+        Models { words: None, media: None, media_used: Instant::now() }
     }
-    f(guard.as_mut().unwrap())
+
+    pub fn is_open(&self) -> bool {
+        self.words.is_some() || self.media.is_some()
+    }
+
+    pub fn close(&mut self) {
+        self.words = None;
+        self.media = None;
+    }
+}
+
+fn opened(e: &Embedder, what: &str, started: Instant) {
+    log(&format!("{what} is open ({:.1} s, {})", started.elapsed().as_secs_f64(), if e.on_gpu() { "on the graphics card" } else { "on the processor" }));
+}
+
+/// The model for one piece: `media` for a picture or a sound. The words are
+/// read by whichever is open —the full model carries them too—, so a folder of
+/// photos with their captions does not open two.
+fn with_model<T>(embedder: &Arc<Mutex<Models>>, media: bool, f: impl FnOnce(&mut Embedder) -> Result<T>) -> Result<T> {
+    let mut m = embedder.lock().unwrap();
+    let gpu = || crate::config::Config::load().gpu;
+    if media {
+        m.media_used = Instant::now();
+        if m.media.is_none() {
+            // The words-only one first: never both on the card at once.
+            m.words = None;
+            let started = Instant::now();
+            let e = Embedder::open_reader(true, gpu())?;
+            opened(&e, "the model with its picture and sound encoders", started);
+            m.media = Some(e);
+        }
+        return f(m.media.as_mut().unwrap());
+    }
+    if m.media.is_some() {
+        if m.media_used.elapsed() < MEDIA_KEPT {
+            return f(m.media.as_mut().unwrap());
+        }
+        m.media = None;
+        log("no pictures or sounds for a while: their encoders are closed");
+    }
+    if m.words.is_none() {
+        let started = Instant::now();
+        let e = Embedder::open_reader(false, gpu())?;
+        opened(&e, "the model (words only)", started);
+        m.words = Some(e);
+    }
+    f(m.words.as_mut().unwrap())
 }
 
 pub fn refresh_status(store: &Store, shared: &Shared) {
@@ -279,7 +351,7 @@ fn apply_changes(store: &Store, shared: &Shared) -> Result<()> {
     let config = shared.config.lock().unwrap().clone();
     for p in changed {
         let ps = p.to_string_lossy().into_owned();
-        if ps.split('/').any(|part| part.starts_with('.') && part.len() > 1) || config.is_excluded(&ps) {
+        if ps.split('/').any(|part| part.starts_with('.') && part.len() > 1) || config.is_excluded(&ps) || inside_worktree(&p) {
             continue;
         }
         if p.is_dir() {
@@ -355,7 +427,16 @@ pub fn run(shared: Arc<Shared>) {
     };
     // Whatever was left halfway when it stopped is read again.
     let _ = store.db.execute("UPDATE files SET status = 'pending' WHERE status = 'reading'", []);
-    let embedder: Arc<Mutex<Option<Embedder>>> = Arc::new(Mutex::new(None));
+    let embedder: Arc<Mutex<Models>> = Arc::new(Mutex::new(Models::new()));
+    // Search by meaning on, and files read while it was off (the setting
+    // changed by hand while the daemon was away): their vectors are owed.
+    if shared.config.lock().unwrap().semantic {
+        if let Ok(n) = store.read_again_without_vectors() {
+            if n > 0 {
+                log(&format!("{n} files read without their vectors: read again"));
+            }
+        }
+    }
     set_phase(&shared, "walking", "");
     if let Err(e) = sync(&store, &shared) {
         log(&format!("walk failed: {e}"));
@@ -384,6 +465,14 @@ pub fn run(shared: Arc<Shared>) {
             std::thread::sleep(Duration::from_millis(700));
             continue;
         }
+        // Search by meaning turned off: whatever model is open goes now.
+        if !shared.config.lock().unwrap().semantic {
+            let mut g = embedder.lock().unwrap();
+            if g.is_open() {
+                g.close();
+                log("search by meaning is off: the model is closed");
+            }
+        }
         let batch = store.next_pending(20).unwrap_or_default();
         // A video playing (a browser, mpv…): reading waits. Opening the model
         // puts about 1 GB on the card in a second or two, and a video read is
@@ -393,8 +482,8 @@ pub fn run(shared: Arc<Shared>) {
             set_phase(&shared, "waiting", "");
             refresh_status(&store, &shared);
             let mut g = embedder.lock().unwrap();
-            if g.is_some() {
-                *g = None;
+            if g.is_open() {
+                g.close();
                 log("a video is playing: the model is closed until it stops");
             }
             drop(g);
@@ -408,8 +497,8 @@ pub fn run(shared: Arc<Shared>) {
             let since = *idle_since.get_or_insert_with(Instant::now);
             if since.elapsed() > Duration::from_secs(90) {
                 let mut g = embedder.lock().unwrap();
-                if g.is_some() {
-                    *g = None;
+                if g.is_open() {
+                    g.close();
                     log("nothing to read: the model is closed");
                 }
             }

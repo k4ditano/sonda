@@ -29,6 +29,7 @@ const HELP: &str = "sonda — search your files by what is in them, and walk the
   sonda search WORDS…     search from here (code: WORDS… for code)
   sonda status            how the reading goes
   sonda pause | resume    stop reading for a while, and go on
+  sonda semantic on|off   search by meaning (the model, on the graphics card), or words and names only
   sonda daemon            the reader and searcher (started by itself)
   sonda setup             puts the model and the window where they go
   sonda dbus              the file manager and the Open/Save dialog on the bus
@@ -51,6 +52,7 @@ fn main() {
             daemon::ensure();
             daemon::ask(&json!({ "op": args[0] })).map(|v| println!("{v}"))
         }
+        Some("semantic") => cli_semantic(args.get(1).map(String::as_str)),
         Some("quit") => daemon::ask(&json!({ "op": "quit" })).map(|_| ()),
         Some("setup") => files::setup(),
         Some("embed-test") => embed_test(&args[1..]),
@@ -64,6 +66,33 @@ fn main() {
         eprintln!("sonda · {e}");
         std::process::exit(1);
     }
+}
+
+/// `sonda semantic on|off`: search by meaning, or words and names only (no
+/// model on the card). Without an answer from the daemon, its settings file.
+fn cli_semantic(what: Option<&str>) -> Result<()> {
+    let on = match what {
+        Some("on") => true,
+        Some("off") => false,
+        None => {
+            println!("search by meaning: {}", if config::Config::load().semantic { "on" } else { "off" });
+            return Ok(());
+        }
+        Some(x) => anyhow::bail!("`sonda semantic on` or `sonda semantic off`, not `{x}`"),
+    };
+    match daemon::ask(&json!({ "op": "semantic", "on": on })) {
+        Ok(v) => println!("search by meaning {}{}", if on { "on" } else { "off" }, match v["again"].as_u64() {
+            Some(n) if n > 0 => format!(" · {n} files to read again for their vectors"),
+            _ => String::new(),
+        }),
+        Err(_) => {
+            let mut c = config::Config::load();
+            c.semantic = on;
+            c.save();
+            println!("search by meaning {} (the daemon is not running: it takes it when it starts)", if on { "on" } else { "off" });
+        }
+    }
+    Ok(())
 }
 
 fn cli_search(q: &str) -> Result<()> {
@@ -99,7 +128,8 @@ fn cli_status() -> Result<()> {
 /// The model against itself: words near the pictures they describe.
 fn embed_test(args: &[String]) -> Result<()> {
     let started = std::time::Instant::now();
-    let mut e = embed::Embedder::open(true, true)?;
+    // SONDA_TEST_WORDS=1: the reader's words-only model, as code and text are read.
+    let mut e = if std::env::var_os("SONDA_TEST_WORDS").is_some() { embed::Embedder::open_reader(false, true)? } else { embed::Embedder::open(true, true)? };
     println!("open in {:.2} s, gpu {}", started.elapsed().as_secs_f64(), embed::Embedder::has_gpu());
     let words = ["a dog on the beach", "un perro en la playa", "a spreadsheet of invoices", "source code in Rust"];
     let t = std::time::Instant::now();
