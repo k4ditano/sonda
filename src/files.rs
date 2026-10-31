@@ -620,10 +620,10 @@ pub fn chmod(path: &Path, mode: u32) -> Result<()> {
     Ok(())
 }
 
-/// A terminal in that folder.
+/// A terminal in that folder: Bitácora, the desktop's own, if it is there.
 pub fn terminal_at(dir: &Path) -> Result<()> {
     let d = dir.to_string_lossy().into_owned();
-    for (t, args) in [("kitty", vec!["--directory".to_owned(), d.clone()]), ("foot", vec!["-D".into(), d.clone()]), ("alacritty", vec!["--working-directory".into(), d.clone()]), ("wezterm", vec!["start".into(), "--cwd".into(), d.clone()]), ("konsole", vec!["--workdir".into(), d.clone()]), ("gnome-terminal", vec![format!("--working-directory={d}")])] {
+    for (t, args) in [("bitacora", vec![d.clone()]), ("kitty", vec!["--directory".to_owned(), d.clone()]), ("foot", vec!["-D".into(), d.clone()]), ("alacritty", vec!["--working-directory".into(), d.clone()]), ("wezterm", vec!["start".into(), "--cwd".into(), d.clone()]), ("konsole", vec!["--workdir".into(), d.clone()]), ("gnome-terminal", vec![format!("--working-directory={d}")])] {
         if which(t) {
             return detach(t, &args);
         }
