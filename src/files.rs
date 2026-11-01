@@ -863,16 +863,17 @@ pub fn open_window(args: &[String]) -> Result<()> {
         let from = scene.parent().map(Path::to_path_buf).unwrap_or_default();
         let dir = from.join("pick");
         for (name, _) in UI {
-            let mut text = std::fs::read_to_string(from.join(name))?;
+            // Bytes, not text: the fonts are in the window's files too.
+            let mut bytes = std::fs::read(from.join(name))?;
             if *name == "sonda.plm" {
-                text = text.replacen("title: \"Sonda\";", "title: \"Sonda · Elegir\";", 1);
+                bytes = String::from_utf8_lossy(&bytes).replacen("title: \"Sonda\";", "title: \"Sonda · Elegir\";", 1).into_bytes();
             }
             let path = dir.join(name);
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            if std::fs::read_to_string(&path).ok() != Some(text.clone()) {
-                std::fs::write(&path, text)?;
+            if std::fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+                std::fs::write(&path, bytes)?;
             }
         }
         scene = dir.join("sonda.plm");
