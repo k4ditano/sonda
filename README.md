@@ -38,6 +38,16 @@ words, in any language, and it digs it up. Everything runs on your computer.
 
 # What's new
 
+- **0.2.1 · Lighter on the graphics card**: reading code and text opens only
+  the words model (about 300 MB of the card instead of 1.25 GB); the picture
+  and sound encoders open when one comes and close a minute after. With the
+  card full it reads on the processor instead of failing.
+- **Search by meaning can be turned off** (Settings, `sonda semantic off`):
+  then no model is ever opened, and a search finds words and names.
+- **A terminal here** is [Bitácora] when it is installed, and «Play here» says
+  «Play» where the window cannot hold the player (plain pleamar, without
+  pleamar-wm): the video opens in your player.
+
 - **A new window**: in the look of the desktop it is on, and following it.
   Under Calima it takes the Taller's accent, surface, ink and corners, and
   changes when you change them. Its letters are Newsreader, Manrope and
@@ -324,6 +334,7 @@ If it helps you find your things, you can **[buy me a coffee on Ko-fi][Ko-fi]** 
 [Keys]: #keys
 [pleamar]: https://github.com/k4ditano/pleamar
 [pleamar-wm]: https://github.com/k4ditano/pleamar-wm
+[Bitácora]: https://github.com/k4ditano/bitacora
 [License]: LICENSE
 [X]: https://x.com/k4ditano
 [Discord]: https://discord.gg/N7kbYC49b2

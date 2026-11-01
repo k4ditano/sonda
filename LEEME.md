@@ -27,6 +27,17 @@ en la tarjeta gráfica con Vulkan. Su ventana es una escena de
 [pleamar](https://github.com/k4ditano/pleamar). La forma de leer los archivos y
 de ordenar los resultados sigue a [DigUp](https://github.com/ARahim3/DigUp) (MIT).
 
+## Novedades de la 0.2.1
+
+- **Más ligera para la gráfica**: leer código y texto abre solo el modelo de las palabras (unos 300 MB de la tarjeta
+  en vez de 1,25 GB); los de imagen y sonido se abren cuando llega uno y se cierran un minuto después. Con la tarjeta
+  llena lee en el procesador en vez de fallar.
+- **La búsqueda por significado se puede apagar** (Ajustes, `sonda semantic off`): entonces no se abre ningún modelo
+  y una búsqueda encuentra palabras y nombres.
+- **Una terminal aquí** es [Bitácora](https://github.com/k4ditano/bitacora) si está instalada, y «Reproducir aquí»
+  dice «Reproducir» donde la ventana no puede tener el reproductor dentro (pleamar sin pleamar-wm): el vídeo se abre
+  en tu reproductor.
+
 ## Qué hace
 
 - **Gestor de archivos**:
