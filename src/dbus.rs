@@ -28,10 +28,35 @@ fn window(args: &[String], env: &[(&str, String)]) -> std::io::Result<std::proce
     let exe = PathBuf::from(exe.to_string_lossy().trim_end_matches(" (deleted)"));
     let mut c = Command::new(exe);
     c.args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    for (k, v) in late_environment() {
+        c.env(k, v);
+    }
     for (k, v) in env {
         c.env(k, v);
     }
     c.spawn()
+}
+
+/// What the desktop told systemd after this process was started. The portal
+/// can wake Sonda before the compositor has said where its display is (the
+/// scene asks the portal how the system looks as it starts, and the display
+/// is told once the monitors are there): started then, Sonda kept a world
+/// without WAYLAND_DISPLAY all day, and every window it opened died at once.
+/// Only what is missing here is taken, and only while the display is.
+fn late_environment() -> Vec<(String, String)> {
+    if std::env::var_os("WAYLAND_DISPLAY").is_some_and(|d| !d.is_empty()) {
+        return Vec::new();
+    }
+    let Ok(out) = Command::new("systemctl").args(["--user", "show-environment"]).stderr(Stdio::null()).output() else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| l.split_once('='))
+        // A value systemd had to quote ($'…') is left as it is.
+        .filter(|(k, v)| !v.starts_with("$'") && std::env::var_os(k).is_none_or(|o| o.is_empty()))
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .collect()
 }
 
 fn paths_of(uris: &[String]) -> Vec<String> {
