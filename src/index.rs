@@ -240,12 +240,20 @@ fn read_file(store: &mut Store, shared: &Shared, embedder: &Arc<Mutex<Models>>, 
         pieces.push(piece);
         Ok(())
     };
-    let info = if kind == Kind::Code {
+    let mut info = if kind == Kind::Code {
         extract::code(&path, &code_title(&path), &mut sink)?
     } else {
         sink(extract::name_piece(&path, &root))?;
         extract::read(kind, &path, &limits, &mut sink)?
     };
+    // Read with search by meaning off: said, so that turning it on reads this
+    // one again —and only those: a file can have no vectors for other reasons
+    // (pieces that are never embedded), and those would be read at every start.
+    if !config.semantic {
+        if let Some(o) = info.as_object_mut() {
+            o.insert("without_meaning".into(), serde_json::Value::Bool(true));
+        }
+    }
     let ids = store.finish(row.id, &pieces, &info.to_string())?;
     let mut v = shared.vectors.write().unwrap();
     v.forget_file(row.id);

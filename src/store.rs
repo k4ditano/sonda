@@ -186,11 +186,11 @@ impl Store {
     }
 
     /// Search by meaning back on: what was read while it was off has its
-    /// words but no vectors, so it is read again. How many.
+    /// words but no vectors (its info says `without_meaning`), so it is read
+    /// again. How many.
     pub fn read_again_without_vectors(&self) -> Result<usize> {
         Ok(self.db.execute(
-            "UPDATE files SET status = 'pending' WHERE status = 'done'
-             AND NOT EXISTS (SELECT 1 FROM segments WHERE segments.file = files.id AND segments.vec IS NOT NULL)",
+            "UPDATE files SET status = 'pending' WHERE status = 'done' AND json_extract(info, '$.without_meaning') = 1",
             [],
         )?)
     }
