@@ -306,6 +306,13 @@ local function stop_player()
     fact.playing = false
 end
 
+-- Whether the window can hold a player: under pleamar-wm it has a compositor of its own (`win.socket`).
+local function can_play()
+    fact["can.play"] = (text["win.socket"] or "") ~= ""
+end
+on("text:win.socket", can_play)
+can_play()
+
 local function play_here(e, at)
     stop_player()
     local socket = text["win.socket"]

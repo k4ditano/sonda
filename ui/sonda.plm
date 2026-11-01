@@ -1112,9 +1112,12 @@ scene Sonda {
             }
             // What can be done with it.
             let by = H - 52 - pickbar
-            zone box lmain { from: x0, by; size: pw - 92, 36; corner: Rs; cursor: pointer; label: pick(if(look.loc or look.media, look.action + 1, 0), "Open", "Open at line", "Open at page", "Play here") }
+            // («Play here» only where the window can hold the player: under pleamar-wm. Elsewhere it opens the
+            // system's player, in a window of its own: «Play».)
+            let lact = if(look.loc or look.media, if(look.action == 2 and not can.play, 4, look.action + 1), 0)
+            zone box lmain { from: x0, by; size: pw - 92, 36; corner: Rs; cursor: pointer; label: pick(lact, "Open", "Open at line", "Open at page", "Play here", "Play") }
             box { from: x0, by; size: pw - 92, 36; corner: Rs; color: acc; opacity: 88% + 12% * lmain.hover }
-            text pick(if(look.loc or look.media, look.action + 1, 0), "Open", "Open at line", "Open at page", "Play here") { at: x0 + (pw - 92) / 2, by + 18; anchor: center; size: 13.5; weight: 650; family: "Manrope"; color: on_acc }
+            text pick(lact, "Open", "Open at line", "Open at page", "Play here", "Play") { at: x0 + (pw - 92) / 2, by + 18; anchor: center; size: 13.5; weight: 650; family: "Manrope"; color: on_acc }
             on press lmain { emit look_act(if(look.loc or look.media, 1, 0)) }
             component LookIcon(k: number, x: number, name: text) {
                 group {
@@ -1669,6 +1672,7 @@ scene Sonda {
         "Nothing sounds like that" = "Nada suena así"
         "Try other words, or another kind of file." = "Prueba con otras palabras, o con otro tipo de archivo."
         "Play here" = "Reproducir aquí"
+        "Play" = "Reproducir"
         "Open at page" = "Abrir en la página"
         "Open at line" = "Abrir en la línea"
         "Open" = "Abrir"
