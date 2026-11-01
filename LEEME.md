@@ -27,6 +27,12 @@ en la tarjeta gráfica con Vulkan. Su ventana es una escena de
 [pleamar](https://github.com/k4ditano/pleamar). La forma de leer los archivos y
 de ordenar los resultados sigue a [DigUp](https://github.com/ARahim3/DigUp) (MIT).
 
+## Novedades de la 0.2.2
+
+- **«Abrir» y «Guardar» vuelven a funcionar**: desde la 0.2.1 el diálogo se cerraba nada más abrirse, sin decir nada
+  (al copiar los archivos de la ventana leía las fuentes como texto). Y un Sonda que el portal despertó antes de que el
+  escritorio dijera dónde está su pantalla ya no se queda sin ella: sus ventanas la encuentran.
+
 ## Novedades de la 0.2.1
 
 - **Más ligera para la gráfica**: leer código y texto abre solo el modelo de las palabras (unos 300 MB de la tarjeta

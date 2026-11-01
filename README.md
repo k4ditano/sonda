@@ -38,6 +38,12 @@ words, in any language, and it digs it up. Everything runs on your computer.
 
 # What's new
 
+- **0.2.2 · «Open» and «Save» work again**: since 0.2.1 the dialog closed
+  as soon as it opened, without a word (its copy of the window's files read
+  the fonts as text). And a Sonda the portal woke before the desktop said
+  where its display is no longer keeps a world without one: its windows find
+  the display.
+
 - **0.2.1 · Lighter on the graphics card**: reading code and text opens only
   the words model (about 300 MB of the card instead of 1.25 GB); the picture
   and sound encoders open when one comes and close a minute after. With the
